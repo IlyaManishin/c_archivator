@@ -8,4 +8,6 @@
 #define BYTE_SIZE 256
 #define BYTE_LENGTH 8
 
+#define uchar unsigned char
+
 #endif

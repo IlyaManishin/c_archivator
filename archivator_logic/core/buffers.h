@@ -2,6 +2,7 @@
 #define BUFFERS_H 1
 
 #include <stdio.h>
+#include <stdint.h>
 
 typedef struct
 {
@@ -9,16 +10,19 @@ typedef struct
     int length;
     char byte;
 
-    int isEmpty;
-    int isBinWriteMode;
+    uint64_t checkSum;
+    uint64_t bitsCount;
 } TBinWriteBuffer;
 
-TBinWriteBuffer *get_write_buffer(FILE *ofile, int isBinWrite);
+TBinWriteBuffer *get_write_buffer(FILE *ofile);
 extern void delete_write_buffer(TBinWriteBuffer *buffer);
 extern void write_buffer_push(TBinWriteBuffer *buffer, int bit);
-extern void write_byte_as_bin_to_file(FILE *destFile, char byte);
-extern void write_byte_as_text_to_file(FILE *destFile, char byte);
+extern void flash_write_buffer(TBinWriteBuffer *buffer);
 
+extern long write_buffer_ftell(TBinWriteBuffer *buffer);
+extern void write_buffer_fseek_cur(TBinWriteBuffer *buffer, long pos);
+extern void buffer_write_arg(TBinWriteBuffer *buffer, void *arg_ptr, size_t size);
+extern void buffer_write_string(TBinWriteBuffer *buffer, char *s);
 
 typedef struct
 {
@@ -31,5 +35,4 @@ extern TBinReadBuffer *get_read_buffer(FILE *ifile);
 extern void delete_read_buffer(TBinReadBuffer *buffer);
 extern int pop_bit_from_read_buffer(TBinReadBuffer *buffer);
 
-
-#endif 
+#endif

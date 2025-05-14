@@ -375,6 +375,51 @@ TPathArr serialize_dir_paths(TPathArr paths, char *dirPath)
     return result;
 }
 
+static char *get_file_name(char *filePath)
+{
+    int length = strlen(filePath);
+    int resLength = 0;
+    char *resStart = filePath + length - 1;
+    for (int i = length - 1; i >= 0; i--)
+    {
+        if (filePath[i] == PATH_SEP)
+        {
+            break;
+        }
+        resLength++;
+        resStart--;
+    }
+    if (resLength == 0)
+    {
+        return NULL;
+    }
+    char *res = (char *)malloc((resLength + 1) * sizeof(char));
+    strcpy(res, resStart);
+    return res;
+}
+
+TPathArr serialize_files_paths(TPathArr paths)
+{
+    TPathArr result;
+    result.pathsCount = paths.pathsCount;
+    result.paths = (char **)malloc(paths.pathsCount * sizeof(char *));
+    for (int i = 0; i < paths.pathsCount; i++)
+    {
+        char *fileName = get_file_name(paths.paths[i]);
+        if (fileName == NULL)
+        {
+            result.pathsCount = 0;
+            for (int j = 0; j < i; j++)
+                free(result.paths[j]);
+            free(result.paths);
+
+            return result;
+        }
+        result.paths[i] = fileName;
+    }
+    return result;
+}
+
 static int test()
 {
     // TPathArr paths;

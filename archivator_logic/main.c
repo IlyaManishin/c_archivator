@@ -16,6 +16,7 @@ void delete_response(TArchivatorResponse *response)
 TArchivatorResponse *run_archivator(TSetupSettings *settings)
 {
     TArchivatorResponse *response = (TArchivatorResponse *)malloc(sizeof(TArchivatorResponse));
+    response->errorMessage = (char *)malloc(ERROR_LENGTH * sizeof(char));
     response->isError = false;
 
     if (UNDEFINED_SYSTEM){
@@ -31,7 +32,7 @@ TArchivatorResponse *run_archivator(TSetupSettings *settings)
         if (settings->_infoDest == NULL)
         {
             response->isError = true;
-            strcpy(response->errorMessage, "Invalid logger path");
+            strcpy(response->errorMessage, "Invalid logging path");
             return response;
         }
     }

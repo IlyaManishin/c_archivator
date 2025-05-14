@@ -6,67 +6,94 @@
 #include "buffers.h"
 #include "settings.h"
 
-
-TBinWriteBuffer *get_write_buffer(FILE *ofile, int isBinWriteMode)
+TBinWriteBuffer *get_write_buffer(FILE *ofile)
 {
     TBinWriteBuffer *buffer = (TBinWriteBuffer *)malloc(sizeof(TBinWriteBuffer));
     buffer->length = 0;
     buffer->byte = 0;
     buffer->destFile = ofile;
-    buffer->isBinWriteMode = isBinWriteMode;
+
+    buffer->checkSum = 0;
+    buffer->bitsCount = 0;
     return buffer;
 }
 
-void write_byte_as_bin_to_file(FILE *destFile, char byte)
+static void write_byte_as_bin_to_file(FILE *destFile, char byte)
 {
     fwrite(&byte, sizeof(char), 1, destFile);
 }
 
-void write_byte_as_text_to_file(FILE *destFile, char byte)
+void flash_write_buffer(TBinWriteBuffer *buffer)
 {
-    for (int i = BYTE_LENGTH - 1; i >= 0; i--)
+    for (int i = buffer->length; i < BYTE_LENGTH; i++)
     {
-        fprintf(destFile, "%d", (int)((byte >> i) & 1));
+        buffer->byte = buffer->byte << 1;
     }
+    write_byte_as_bin_to_file(buffer->destFile, buffer->byte);
+    buffer->bitsCount += BYTE_LENGTH;
+    buffer->length = 0;
 }
 
 void write_buffer_push(TBinWriteBuffer *buffer, int bit)
 {
-    if (buffer->length == 8)
+    if (buffer->length == BYTE_LENGTH)
     {
-        if (buffer->isBinWriteMode)
-        {
-            write_byte_as_bin_to_file(buffer->destFile, buffer->byte);
-        }
-        else
-        {
-            write_byte_as_text_to_file(buffer->destFile, buffer->byte);
-        }
+        flash_write_buffer(buffer);
         buffer->byte = bit;
         buffer->length = 1;
         return;
     }
     buffer->byte = (buffer->byte << 1) + bit;
+    if (bit)
+    {
+        buffer->checkSum++;
+    }
     buffer->length++;
+}
+
+long write_buffer_ftell(TBinWriteBuffer *buffer)
+{
+    return ftell(buffer->destFile);
+}
+
+void write_buffer_fseek_cur(TBinWriteBuffer *buffer, long pos)
+{
+    fseek(buffer->destFile, pos, SEEK_CUR);
+}
+
+void buffer_write_arg(TBinWriteBuffer *buffer, void *arg_ptr, size_t size)
+{
+    int numSizeBits = size * BYTE_LENGTH;
+    int numCheckSum = 0;
+
+    uchar *byte = (uchar *)arg_ptr;
+    for (int byteInd = 0; byteInd < size; byteInd++)
+    {
+        for (int i = 0; i < BYTE_LENGTH; i++)
+        {
+            if (((*byte) >> i) & 1)
+            {
+                numCheckSum++;
+            }
+        }
+        byte++;
+    }
+
+    buffer->checkSum += numCheckSum;
+    buffer->bitsCount += numSizeBits;
+
+    fwrite(arg_ptr, size, 1, buffer->destFile);
+}
+
+void buffer_write_string(TBinWriteBuffer *buffer, char *s)
+{
+    int length = strlen(s);
+    buffer_write_arg(buffer, s, length);
 }
 
 void delete_write_buffer(TBinWriteBuffer *buffer)
 {
-    if (buffer->length == 0)
-        return;
-
-    for (int i = buffer->length; i < 8; i++)
-    {
-        buffer->byte = buffer->byte << 1;
-    }
-    if (buffer->isBinWriteMode)
-    {
-        write_byte_as_bin_to_file(buffer->destFile, buffer->byte);
-    }
-    else
-    {
-        write_byte_as_text_to_file(buffer->destFile, buffer->byte);
-    }
+    flash_write_buffer(buffer);
     free(buffer);
 }
 
@@ -82,7 +109,7 @@ TBinReadBuffer *get_read_buffer(FILE *ifile)
     }
     else
     {
-        buffer->length = 8;
+        buffer->length = BYTE_LENGTH;
     }
 
     return buffer;
@@ -96,7 +123,7 @@ int pop_bit_from_read_buffer(TBinReadBuffer *buffer)
         if (res == 0)
             return 0;
 
-        buffer->length = 8;
+        buffer->length = BYTE_LENGTH;
     }
 
     int bit = (buffer->byte >> (buffer->length - 1)) & 1;

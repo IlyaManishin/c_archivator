@@ -46,9 +46,8 @@ typedef struct
     char* path;
     bool _isFreePathNeeded;
 
-    uint64_t checkSum;
-    uint64_t srcSize;
-    uint64_t compressSize;
+    uint64_t baseSizeBytes;
+    uint64_t compressSizeBytes;
 } TFileData;
 
 #endif

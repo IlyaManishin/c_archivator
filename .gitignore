@@ -3,3 +3,5 @@ __archivator_sources.c_back
 runner.sh
 plan.txt
 test/
+.gitignore
+*.mach

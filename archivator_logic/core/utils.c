@@ -2,15 +2,6 @@
 
 #define BASE_BUFFER_LENGTH 64
 
-void write_string_to_file(FILE *file, char *s)
-{
-    int length = strlen(s);
-    for (int i = 0; i < length; i++)
-    {
-        
-    }
-}
-
 char *read_string_from_file(FILE *file)
 {
     int capacity = BASE_BUFFER_LENGTH;

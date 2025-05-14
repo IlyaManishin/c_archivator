@@ -48,6 +48,8 @@ extern bool is_dir_exists(char *dir);
 extern bool is_file_exists(char *path);
 extern TPathArr list_dir(char *dirPath);
 extern TPathArr serialize_dir_paths(TPathArr paths, char *dirPath);
+extern TPathArr serialize_files_paths(TPathArr paths);
+
 extern char *get_real_path(char *src);
 extern void delete_path_arr(TPathArr arr);
 

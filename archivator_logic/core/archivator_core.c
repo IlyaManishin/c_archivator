@@ -9,7 +9,6 @@
 #include "buffers.h"
 #include "haffman_tree.h"
 #include "settings.h"
-#include "utils.h"
 
 #define uchar unsigned char
 
@@ -93,7 +92,15 @@ TCode *read_codes_from_tree(TTreePoint *tree)
     return codes;
 }
 
-void write_tree_recursion(FILE *ofile, TTreePoint *tree, TBinWriteBuffer *buffer)
+void delete_file_data(TFileData data)
+{
+    if (data._isFreePathNeeded)
+    {
+        free(data.path);
+    }
+}
+
+void write_tree_recursion(TTreePoint *tree, TBinWriteBuffer *buffer)
 {
     if (tree->type == leafType)
     {
@@ -116,22 +123,21 @@ void write_tree_recursion(FILE *ofile, TTreePoint *tree, TBinWriteBuffer *buffer
     write_buffer_push(buffer, 0);
     if (tree->left != NULL)
     {
-        write_tree_recursion(ofile, tree->left, buffer);
+        write_tree_recursion(tree->left, buffer);
     }
     if (tree->right != NULL)
     {
-        write_tree_recursion(ofile, tree->right, buffer);
+        write_tree_recursion(tree->right, buffer);
     }
 }
 
-void write_tree_to_file(FILE *ofile, TTreePoint *tree, int pointCount)
+void write_tree_to_file(TBinWriteBuffer *buffer, TTreePoint *tree, int pointCount)
 {
     uchar bytePointCount = (uchar)pointCount;
-    write_byte_as_bin_to_file(ofile, bytePointCount);
+    buffer_write_arg(buffer, &bytePointCount, sizeof(uchar));
 
-    TBinWriteBuffer *writeBuffer = get_write_buffer(ofile, 1);
-    write_tree_recursion(ofile, tree, writeBuffer);
-    delete_write_buffer(writeBuffer);
+    write_tree_recursion(tree, buffer);
+    flash_write_buffer(buffer);
 }
 
 void read_tree_recursion(TBinReadBuffer *readBuffer, TTreePoint *curPoint, int deep, int *codesCount)
@@ -172,7 +178,6 @@ TTreePoint *read_tree_from_file(FILE *ifile)
         codesCount = MAX_CODES_COUNT;
 
     TBinReadBuffer *buffer = get_read_buffer(ifile);
-
     TTreePoint *tree = get_tree_point();
     tree->type = pointType;
     read_tree_recursion(buffer, tree, 0, &codesCount);
@@ -213,10 +218,8 @@ TArchivatorData extract_file_data(FILE *srcFile)
     return data;
 }
 
-void archivate_file_with_codes(FILE *ifile, FILE *ofile, TCode *codes)
+void archivate_file_with_codes(FILE *ifile, TBinWriteBuffer *writeBuffer, TCode *codes)
 {
-    TBinWriteBuffer *write_buffer = get_write_buffer(ofile, 1);
-
     uchar byte;
     while (fread(&byte, sizeof(uchar), 1, ifile) != 0)
     {
@@ -225,15 +228,15 @@ void archivate_file_with_codes(FILE *ifile, FILE *ofile, TCode *codes)
         {
             if (code.codeValue[i] == '1')
             {
-                write_buffer_push(write_buffer, 1);
+                write_buffer_push(writeBuffer, 1);
             }
             else
             {
-                write_buffer_push(write_buffer, 0);
+                write_buffer_push(writeBuffer, 0);
             }
         }
     }
-    delete_write_buffer(write_buffer);
+    flash_write_buffer(writeBuffer);
 }
 
 void dearchivate_file(FILE *archivePath, char destPath[])
@@ -275,46 +278,54 @@ void dearchivate_file(FILE *archivePath, char destPath[])
     fclose(destFile);
 }
 
-static void write_check_sum(FILE *dest, long checkSumPos, uint64_t checkSum)
+static void write_check_data(TBinWriteBuffer *buffer, long checkSumPos, uint64_t checkSum, uint64_t bitsCount)
 {
-    long curPos = ftell(dest);
-    fseek(dest, checkSumPos - curPos, SEEK_CUR);
-    fwrite(&checkSum, sizeof(uint64_t), 1, dest);
-    fseek(dest, curPos - checkSumPos, SEEK_CUR);
+    long endPos = write_buffer_ftell(buffer);
+    write_buffer_fseek_cur(buffer, checkSumPos - endPos);
+    buffer_write_arg(buffer, &checkSum, sizeof(uint64_t));
+    buffer_write_arg(buffer, &bitsCount, sizeof(uint64_t));
+
+    long curPos = write_buffer_ftell(buffer);
+    write_buffer_fseek_cur(buffer, endPos - curPos);
 }
 
-TFileData archivate_file(char *sourcePath, char *serializedPath, FILE *archiveFile, TArchivatorResponse *respDest)
+TFileData archivate_file(char *sourcePath, char *serializedPath, FILE *archiveFile, TArchivatorResponse *errorDest)
 {
     TFileData result;
     result.path = sourcePath;
     result._isFreePathNeeded = false;
+    result.compressSizeBytes = 0;
 
     FILE *srcFile = fopen(sourcePath, "rb");
     if (srcFile == NULL)
     {
-        snprintf(respDest->errorMessage, ERROR_LENGTH, "Can't open file to read: %s", sourcePath);
-        respDest->isError = true;
+        snprintf(errorDest->errorMessage, ERROR_LENGTH, "Can't open file to read: %s", sourcePath);
+        errorDest->isError = true;
         return result;
     }
 
     TArchivatorData data = extract_file_data(srcFile);
     int fileLength = data.freqsData.fileLength;
+    result.baseSizeBytes = fileLength;
 
-    fwrite(&fileLength, sizeof(int), 1, archiveFile);
-    write_string_to_file(archiveFile, serializedPath);
+    TBinWriteBuffer *writeBuffer = get_write_buffer(archiveFile);
 
-    long checkSumPos = ftell(archiveFile);
-    fseek(archiveFile, sizeof(uint64_t), SEEK_CUR);
+    long checkSumPos = write_buffer_ftell(writeBuffer);
+    size_t checkDataOffset = 2 * sizeof(uint64_t);
+    write_buffer_fseek_cur(writeBuffer, checkDataOffset);
 
-    uint64_t checkSum = 0;
-    write_tree_to_file(archiveFile, data.codeTree, data.freqsData.codesCount);
-    archivate_file_with_codes(srcFile, archiveFile, data.codes);
-    write_check_sum(archiveFile, checkSumPos, checkSum);
-    
+    buffer_write_string(writeBuffer, serializedPath);
+
+    write_tree_to_file(writeBuffer, data.codeTree, data.freqsData.codesCount);
+    archivate_file_with_codes(srcFile, writeBuffer, data.codes);
+
+    write_check_data(writeBuffer, checkSumPos, writeBuffer->checkSum, writeBuffer->bitsCount);
+
+    result.compressSizeBytes = writeBuffer->bitsCount / BYTE_LENGTH;
+
     free(data.codes);
     free(data.freqsData.frequencies);
     delete_tree(data.codeTree);
-
     fclose(srcFile);
 
     return result;

@@ -6,7 +6,6 @@
 #include <string.h>
 #include <stdlib.h>
 
-void write_string_to_file(FILE *file, char *s);
-char *read_string_from_file(FILE *file);
+extern char *read_string_from_file(FILE *file);
 
 #endif 

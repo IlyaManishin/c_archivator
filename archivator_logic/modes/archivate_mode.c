@@ -21,13 +21,13 @@ bool is_valid_paths(TPathArr paths, TArchivatorResponse *resp)
         {
             resp->isError = true;
             snprintf(resp->errorMessage, ERROR_LENGTH, "Can't open path: %s", paths.paths[i]);
-            return true;
+            return false;
         }
     }
-    return false;
+    return true;
 }
 
-//check memory
+// check memory!!!!
 TPathArr get_paths_to_archivate(TSetupSettings *settings, TArchivatorResponse *resp)
 {
     TPathArr paths;
@@ -81,6 +81,21 @@ TPathArr get_paths_to_archivate(TSetupSettings *settings, TArchivatorResponse *r
     return paths;
 }
 
+static void write_result(TFileData data, TSetupSettings *settings)
+{
+    printf("added: %s\n", data.path);
+    printf("Base size: %lu bytes (%Lf MB), compressed size: %lu bytes (%Lf MB)\n",
+           data.baseSizeBytes, (long double)data.baseSizeBytes / 1024 / 1024,
+           data.compressSizeBytes, (long double)data.compressSizeBytes / 1024 / 1024);
+    printf("\n");
+    // bool isInfo = settings->withInfo;
+    // bool isConsoleInfo = false;
+    // if (isInfo && settings->_infoDest == stdout)
+    // {
+    //     isConsoleInfo = true;
+    // }
+}
+
 void archivate_mode_run(TSetupSettings *settings, TArchivatorResponse *resp)
 {
     if (IS_WINDOWS)
@@ -104,20 +119,35 @@ void archivate_mode_run(TSetupSettings *settings, TArchivatorResponse *resp)
     {
         return;
     }
+    TPathArr serializedPaths;
+    if (settings->dirToArchivate != NULL)
+    {
+        serializedPaths = serialize_dir_paths(paths, settings->dirToArchivate);
+    }
+    else
+    {
+        serializedPaths = serialize_files_paths(paths);
+    }
+    if (serializedPaths.pathsCount == 0)
+    {
+        snprintf(resp->errorMessage, ERROR_LENGTH, "Can`t save paths to archive");
+        resp->isError = true;
+        goto exit;
+    }
 
     write_headers_to_archive(archive, paths);
     for (int i = 0; i < paths.pathsCount; i++)
     {
-        TFileData result = archivate_file(paths.paths[i], archive, resp);
+        TFileData result = archivate_file(paths.paths[i], serializedPaths.paths[i], archive, resp);
 
-        if (result._isFreePathNeeded)
-        {
-            free(result.path);
-        }
         if (resp->isError)
         {
-            return;
+            remove(destPath);
+            delete_file_data(result);
+            goto exit;
         }
+        write_result(result, settings);
+        delete_file_data(result);
     }
 
 exit:
