@@ -33,6 +33,8 @@ typedef struct
 
     bool isError;
     char *errorMessage;
+
+    char* _absDirToArchivate;
 } TSetupSettings;
 
 typedef struct

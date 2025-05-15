@@ -40,6 +40,8 @@ TSetupSettings *get_settings()
 
     settings->isError = false;
     settings->errorMessage = (char *)malloc(ERROR_LENGTH * sizeof(char));
+
+    settings->_absDirToArchivate = NULL;
     return settings;
 }
 

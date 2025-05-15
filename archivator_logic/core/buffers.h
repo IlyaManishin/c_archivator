@@ -11,7 +11,7 @@ typedef struct
     char byte;
 
     uint64_t checkSum;
-    uint64_t bitsCount;
+    uint64_t bytesCount;
 } TBinWriteBuffer;
 
 TBinWriteBuffer *get_write_buffer(FILE *ofile);
@@ -29,10 +29,15 @@ typedef struct
     FILE *readFile;
     int length;
     char byte;
+
+    uint64_t checkSum;
 } TBinReadBuffer;
 
 extern TBinReadBuffer *get_read_buffer(FILE *ifile);
 extern void delete_read_buffer(TBinReadBuffer *buffer);
 extern int pop_bit_from_read_buffer(TBinReadBuffer *buffer);
+extern char *buffer_read_string(TBinReadBuffer* readBuffer);
+extern size_t buffer_read_arg(TBinReadBuffer *buffer, void* arg, size_t size);
+
 
 #endif

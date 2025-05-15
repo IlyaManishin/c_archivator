@@ -14,11 +14,16 @@ typedef struct
 
 void delete_path_arr(TPathArr arr)
 {
+    if (arr.paths == NULL)
+    {
+        return;
+    }
     for (int i = 0; i < arr.pathsCount; i++)
     {
         free(arr.paths[i]);
     }
     free(arr.paths);
+    arr.paths = NULL;
 }
 
 bool is_dir_exists(char *dir)
@@ -346,13 +351,12 @@ static char *get_parent(char *path)
 
 TPathArr serialize_dir_paths(TPathArr paths, char *dirPath)
 {
-    char *diraAbsPath = get_real_path(dirPath);
-
     TPathArr result;
     result.paths = (char **)malloc(paths.pathsCount * sizeof(char *));
     result.pathsCount = paths.pathsCount;
 
-    char *dirParent = get_parent(dirPath);
+    char* dirAbsPath = get_real_path(dirPath);
+    char *dirParent = get_parent(dirAbsPath);
     int parentLength = strlen(dirParent);
     for (int i = 0; i < paths.pathsCount; i++)
     {
@@ -372,6 +376,7 @@ TPathArr serialize_dir_paths(TPathArr paths, char *dirPath)
     {
         replace_path_sep(result.paths[i], PATH_SEP, SERIALIZE_SEP);
     }
+    free(dirAbsPath);
     return result;
 }
 

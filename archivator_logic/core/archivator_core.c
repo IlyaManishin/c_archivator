@@ -34,7 +34,16 @@ typedef struct
     TFrequenciesData freqsData;
 } TArchivatorData;
 
-TFrequenciesData count_file_frequencies(FILE *file)
+typedef struct
+{
+    uint64_t checkSum;
+    uint64_t compressSizeBytes;
+    uint64_t baseSizeBytes;
+
+    int isValid;
+} THeaderData;
+
+static TFrequenciesData count_file_frequencies(FILE *file)
 {
     TFrequenciesData freqsData;
     freqsData.fileLength = 0;
@@ -59,7 +68,7 @@ TFrequenciesData count_file_frequencies(FILE *file)
     return freqsData;
 }
 
-void read_codes_recursion(TTreePoint *item, char *codeBuffer, int deep, TCode *dest)
+static void read_codes_recursion(TTreePoint *item, char *codeBuffer, int deep, TCode *dest)
 {
     if (item == NULL)
         return;
@@ -81,7 +90,7 @@ void read_codes_recursion(TTreePoint *item, char *codeBuffer, int deep, TCode *d
     read_codes_recursion(item->right, codeBuffer, deep + 1, dest);
 }
 
-TCode *read_codes_from_tree(TTreePoint *tree)
+static TCode *read_codes_from_tree(TTreePoint *tree)
 {
     TCode *codes = (TCode *)malloc(MAX_CODES_COUNT * sizeof(TCode));
     for (int i = 0; i < MAX_CODES_COUNT; i++)
@@ -92,7 +101,7 @@ TCode *read_codes_from_tree(TTreePoint *tree)
     return codes;
 }
 
-void delete_file_data(TFileData data)
+static void delete_file_data(TFileData data)
 {
     if (data._isFreePathNeeded)
     {
@@ -100,7 +109,7 @@ void delete_file_data(TFileData data)
     }
 }
 
-void write_tree_recursion(TTreePoint *tree, TBinWriteBuffer *buffer)
+static void write_tree_recursion(TTreePoint *tree, TBinWriteBuffer *buffer)
 {
     if (tree->type == leafType)
     {
@@ -131,7 +140,7 @@ void write_tree_recursion(TTreePoint *tree, TBinWriteBuffer *buffer)
     }
 }
 
-void write_tree_to_file(TBinWriteBuffer *buffer, TTreePoint *tree, int pointCount)
+static void write_tree_to_file(TBinWriteBuffer *buffer, TTreePoint *tree, int pointCount)
 {
     uchar bytePointCount = (uchar)pointCount;
     buffer_write_arg(buffer, &bytePointCount, sizeof(uchar));
@@ -140,7 +149,7 @@ void write_tree_to_file(TBinWriteBuffer *buffer, TTreePoint *tree, int pointCoun
     flash_write_buffer(buffer);
 }
 
-void read_tree_recursion(TBinReadBuffer *readBuffer, TTreePoint *curPoint, int deep, int *codesCount)
+static void read_tree_recursion(TBinReadBuffer *readBuffer, TTreePoint *curPoint, int deep, int *codesCount)
 {
     if (*codesCount == 0)
         return;
@@ -169,15 +178,18 @@ void read_tree_recursion(TBinReadBuffer *readBuffer, TTreePoint *curPoint, int d
     read_tree_recursion(readBuffer, curPoint->right, deep + 1, codesCount);
 }
 
-TTreePoint *read_tree_from_file(FILE *ifile)
+static TTreePoint *read_tree_from_file(TBinReadBuffer *buffer)
 {
     uchar codesCountByte;
-    fread(&codesCountByte, sizeof(uchar), 1, ifile);
+    size_t res = buffer_read_arg(buffer, &codesCountByte, sizeof(uchar));
+    if (res == 0)
+    {
+        return NULL;
+    }
     int codesCount = (int)codesCountByte;
     if (codesCount == 0)
         codesCount = MAX_CODES_COUNT;
 
-    TBinReadBuffer *buffer = get_read_buffer(ifile);
     TTreePoint *tree = get_tree_point();
     tree->type = pointType;
     read_tree_recursion(buffer, tree, 0, &codesCount);
@@ -186,7 +198,7 @@ TTreePoint *read_tree_from_file(FILE *ifile)
     return tree;
 }
 
-TArchivatorData extract_file_data(FILE *srcFile)
+static TArchivatorData extract_file_data(FILE *srcFile)
 {
     TFrequenciesData freqsData = count_file_frequencies(srcFile);
     TTreeArr *treeArr = get_tree_arr_by_freq(freqsData.frequencies, freqsData.codesCount);
@@ -239,22 +251,36 @@ void archivate_file_with_codes(FILE *ifile, TBinWriteBuffer *writeBuffer, TCode 
     flash_write_buffer(writeBuffer);
 }
 
-void dearchivate_file(FILE *archivePath, char destPath[])
+static THeaderData read_header_data(FILE *archive)
 {
-    FILE *destFile = fopen(destPath, "wb");
+    THeaderData result;
+    uint64_t *fields[] = {&result.checkSum, &result.compressSizeBytes, &result.baseSizeBytes};
 
-    int fileLength;
-    fread(&fileLength, sizeof(int), 1, archivePath);
+    for (int i = 0; i < 3; ++i)
+    {
+        if (fread(fields[i], sizeof(uint64_t), 1, archive) != 1)
+        {
+            result.isValid = false;
+            return result;
+        }
+    }
 
-    TTreePoint *root = read_tree_from_file(archivePath);
-    TTreePoint *curPoint = root;
+    result.isValid = true;
+    return result;
+}
 
-    TBinReadBuffer *readBuffer = get_read_buffer(archivePath);
-    int charsCount = 0;
+static bool dearchivate_file_with_tree(TBinReadBuffer *readBuffer, TTreePoint *tree, FILE *destFile, uint64_t fileLength)
+{
+    TTreePoint *curPoint = tree;
+
+    uint64_t charsCount = 0;
     while (charsCount != fileLength)
     {
         int bit = pop_bit_from_read_buffer(readBuffer);
-
+        if (bit == -1)
+        {
+            return false;
+        }
         if (curPoint->type != leafType)
         {
             if (bit == 0)
@@ -272,18 +298,64 @@ void dearchivate_file(FILE *archivePath, char destPath[])
             fwrite(&code, sizeof(char), 1, destFile);
 
             charsCount++;
-            curPoint = root;
+            curPoint = tree;
         }
     }
-    fclose(destFile);
+    return true;
 }
 
-static void write_check_data(TBinWriteBuffer *buffer, long checkSumPos, uint64_t checkSum, uint64_t bitsCount)
+TFileData dearchivate_file(FILE *archiveFile, TArchivatorResponse *errorDest)
+{
+    TFileData result;
+
+    THeaderData headerData = read_header_data(archiveFile);
+    if (!headerData.isValid)
+    {
+        goto invalid_archive_error;
+    }
+    TBinReadBuffer *readBuffer = get_read_buffer(archiveFile);
+
+    char *destPath = buffer_read_string(readBuffer);
+    if (destPath == NULL)
+    {
+        goto invalid_archive_error;
+    }
+
+    TTreePoint *tree = read_tree_from_file(readBuffer);
+    if (tree == NULL)
+    {
+        goto invalid_archive_error;
+    }
+
+    FILE *destFile = fopen(destPath, "wb");
+    bool isSuccess = dearchivate_file_with_tree(readBuffer, tree, destFile, headerData.compressSizeBytes);
+    if (!isSuccess)
+    {
+        // delete file
+        delete_tree(tree);
+        fclose(destFile);
+        goto invalid_archive_error;
+    }
+    fclose(destFile);
+
+    result.path = destPath;
+    result.baseSizeBytes = headerData.baseSizeBytes;
+    result.compressSizeBytes = headerData.compressSizeBytes;
+    return result;
+
+invalid_archive_error:
+    strcpy(errorDest->errorMessage, "Invalid archive");
+    errorDest->isError = true;
+    return result;
+}
+
+static void write_header_data(TBinWriteBuffer *buffer, THeaderData data, long headerPos)
 {
     long endPos = write_buffer_ftell(buffer);
-    write_buffer_fseek_cur(buffer, checkSumPos - endPos);
-    buffer_write_arg(buffer, &checkSum, sizeof(uint64_t));
-    buffer_write_arg(buffer, &bitsCount, sizeof(uint64_t));
+    write_buffer_fseek_cur(buffer, headerPos - endPos);
+    buffer_write_arg(buffer, &data.checkSum, sizeof(uint64_t));
+    buffer_write_arg(buffer, &data.compressSizeBytes, sizeof(uint64_t));
+    buffer_write_arg(buffer, &data.baseSizeBytes, sizeof(uint64_t));
 
     long curPos = write_buffer_ftell(buffer);
     write_buffer_fseek_cur(buffer, endPos - curPos);
@@ -305,23 +377,27 @@ TFileData archivate_file(char *sourcePath, char *serializedPath, FILE *archiveFi
     }
 
     TArchivatorData data = extract_file_data(srcFile);
-    int fileLength = data.freqsData.fileLength;
-    result.baseSizeBytes = fileLength;
+    uint64_t fileLength = data.freqsData.fileLength;
 
     TBinWriteBuffer *writeBuffer = get_write_buffer(archiveFile);
 
-    long checkSumPos = write_buffer_ftell(writeBuffer);
-    size_t checkDataOffset = 2 * sizeof(uint64_t);
-    write_buffer_fseek_cur(writeBuffer, checkDataOffset);
+    long headerDataPos = write_buffer_ftell(writeBuffer);
+    size_t headerDataOffset = 3 * sizeof(uint64_t);
+    write_buffer_fseek_cur(writeBuffer, headerDataOffset);
 
     buffer_write_string(writeBuffer, serializedPath);
 
     write_tree_to_file(writeBuffer, data.codeTree, data.freqsData.codesCount);
     archivate_file_with_codes(srcFile, writeBuffer, data.codes);
 
-    write_check_data(writeBuffer, checkSumPos, writeBuffer->checkSum, writeBuffer->bitsCount);
+    THeaderData headerData;
+    headerData.checkSum = writeBuffer->checkSum;
+    headerData.compressSizeBytes = writeBuffer->bytesCount;
+    headerData.baseSizeBytes = fileLength;
+    write_header_data(writeBuffer, headerData, headerDataPos);
 
-    result.compressSizeBytes = writeBuffer->bitsCount / BYTE_LENGTH;
+    result.compressSizeBytes = writeBuffer->bytesCount;
+    result.baseSizeBytes = fileLength;
 
     free(data.codes);
     free(data.freqsData.frequencies);

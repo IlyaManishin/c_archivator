@@ -1,38 +1,38 @@
 #include "utils.h"  
 
-#define BASE_BUFFER_LENGTH 64
 
 char *read_string_from_file(FILE *file)
 {
-    int capacity = BASE_BUFFER_LENGTH;
+    int baseBufferLength = 32;
+    int capacity = baseBufferLength;
     int length = 0;
-    char *buffer = malloc(capacity);
-    if (!buffer)
+    char *string_buffer = malloc(capacity);
+    if (!string_buffer)
         return NULL;
 
     char ch;
     while (fread(&ch, sizeof(char), 1, file) != 0)
     {
-        buffer[length] = (char)ch;
+        string_buffer[length] = (char)ch;
         length++;
 
         if (ch == '\0')
         {
-            return buffer;
+            return string_buffer;
         }
 
         if (length >= capacity)
         {
             capacity *= 2;
-            char *newBuffer = realloc(buffer, capacity);
+            char *newBuffer = realloc(string_buffer, capacity);
             if (!newBuffer)
             {
-                free(buffer);
+                free(string_buffer);
                 return NULL;
             }
-            buffer = newBuffer;
+            string_buffer = newBuffer;
         }
     }
-    free(buffer);
+    free(string_buffer);
     return NULL;
 }

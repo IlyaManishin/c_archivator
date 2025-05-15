@@ -4,7 +4,7 @@
 #include <string.h>
 
 #include "archivator_api.h"
-#include "modes/pathlib.h"
+#include "include/pathlib.h"
 #include "modes/modes.h"
 
 void delete_response(TArchivatorResponse *response)
