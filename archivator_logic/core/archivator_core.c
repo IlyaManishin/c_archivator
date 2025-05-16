@@ -5,6 +5,7 @@
 #include <stdbool.h>
 
 #include "../include/types.h"
+#include "../include/pathlib.h"
 
 #include "buffers.h"
 #include "haffman_tree.h"
@@ -101,7 +102,7 @@ static TCode *read_codes_from_tree(TTreePoint *tree)
     return codes;
 }
 
-static void delete_file_data(TFileData data)
+void delete_file_data(TFileData data)
 {
     if (data._isFreePathNeeded)
     {
@@ -304,9 +305,10 @@ static bool dearchivate_file_with_tree(TBinReadBuffer *readBuffer, TTreePoint *t
     return true;
 }
 
-TFileData dearchivate_file(FILE *archiveFile, TArchivatorResponse *errorDest)
+TFileData dearchivate_file(FILE *archiveFile, char* absDestDir, TArchivatorResponse *errorDest)
 {
     TFileData result;
+    int destDirLength = strlen(absDestDir);
 
     THeaderData headerData = read_header_data(archiveFile);
     if (!headerData.isValid)
@@ -315,36 +317,59 @@ TFileData dearchivate_file(FILE *archiveFile, TArchivatorResponse *errorDest)
     }
     TBinReadBuffer *readBuffer = get_read_buffer(archiveFile);
 
-    char *destPath = buffer_read_string(readBuffer);
-    if (destPath == NULL)
+    char *destRelPath = buffer_read_string(readBuffer);
+    if (destRelPath == NULL)
     {
         goto invalid_archive_error;
     }
-
+    char* destPath = path_concat(absDestDir, destRelPath, SERIALIZE_SEP);
+    printf("%s\n\n", destPath);
     TTreePoint *tree = read_tree_from_file(readBuffer);
     if (tree == NULL)
     {
         goto invalid_archive_error;
     }
 
-    FILE *destFile = fopen(destPath, "wb");
+    int res = create_dirs_for_file(destPath);
+    if (res == -1)
+    {
+        delete_tree(tree);
+        goto invalid_file_path_error;
+    }
+    char *freePath = get_free_file_path(destPath);
+    if (freePath == NULL)
+    {
+        delete_tree(tree);
+        goto invalid_file_path_error;
+    }
+
+    FILE *destFile = fopen(freePath, "wb");
+    if (destFile == NULL){
+        delete_tree(tree);
+        goto invalid_file_path_error;
+    }
     bool isSuccess = dearchivate_file_with_tree(readBuffer, tree, destFile, headerData.compressSizeBytes);
     if (!isSuccess)
     {
-        // delete file
+        remove(destRelPath);
         delete_tree(tree);
         fclose(destFile);
         goto invalid_archive_error;
     }
     fclose(destFile);
 
-    result.path = destPath;
+    result.path = freePath;
     result.baseSizeBytes = headerData.baseSizeBytes;
     result.compressSizeBytes = headerData.compressSizeBytes;
     return result;
 
 invalid_archive_error:
     strcpy(errorDest->errorMessage, "Invalid archive");
+    errorDest->isError = true;
+    return result;
+
+invalid_file_path_error:
+    snprintf(errorDest->errorMessage, ERROR_LENGTH, "Can't save file: %s", destRelPath);
     errorDest->isError = true;
     return result;
 }

@@ -1,10 +1,11 @@
-#include "pathlib.h"
+#include "include/pathlib.h"
 
 #include <limits.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 
 typedef struct
 {
@@ -49,6 +50,23 @@ bool is_dir_exists(char *dir)
 #endif
 
     return NULL;
+}
+
+int make_dir(char *name)
+{
+#if defined(_WIN32)
+    return -1;
+
+#elif defined(__linux__)
+    int res = mkdir(name, 0755);
+    if (res == -1 && errno == EEXIST)
+    {
+        return 0;
+    }
+    return res;
+#else
+    return -1;
+#endif
 }
 
 bool is_file_exists(char *path)
@@ -355,7 +373,7 @@ TPathArr serialize_dir_paths(TPathArr paths, char *dirPath)
     result.paths = (char **)malloc(paths.pathsCount * sizeof(char *));
     result.pathsCount = paths.pathsCount;
 
-    char* dirAbsPath = get_real_path(dirPath);
+    char *dirAbsPath = get_real_path(dirPath);
     char *dirParent = get_parent(dirAbsPath);
     int parentLength = strlen(dirParent);
     for (int i = 0; i < paths.pathsCount; i++)
@@ -425,7 +443,136 @@ TPathArr serialize_files_paths(TPathArr paths)
     return result;
 }
 
-static int test()
+int create_dirs_for_file(char *filePath)
+{
+    char *fileDir = get_parent(filePath);
+    int length = strlen(fileDir);
+    char *buffer = (char *)malloc((length + 1) * sizeof(char));
+    for (int i = 0; i < length; i++)
+    {
+        if (filePath[i] == SERIALIZE_SEP)
+        {
+            if (i != 0)
+            {
+                buffer[i + 1] = '\0';
+                int res = make_dir(buffer);
+                if (res == -1)
+                {
+                    return -1;
+                }
+            }
+        }
+        buffer[i] = filePath[i];
+    }
+    free(buffer);
+    return 0;
+}
+
+char *path_concat(char *path1, char *path2, char sep)
+{
+    int length1 = strlen(path1);
+    int length2 = strlen(path2);
+
+    char *res = (char *)malloc((length1 + length2 + 2) * sizeof(char));
+    char *rightDest = res;
+    if (path1[length1] != sep)
+    {
+        strcpy(res, path1);
+        res[length1] = sep;
+        rightDest += length1 + 1;
+    }
+    else
+    {
+        strcpy(res, path1);
+        rightDest += length1;
+    }
+
+    if (length2 == 0)
+    {
+        return res;
+    }
+    if (path2[0] != sep)
+    {
+        stpcpy(rightDest, path2);
+    }
+    else
+    {
+        strcpy(rightDest, path2 + 1);
+    }
+    return res;
+}
+
+char *get_free_file_path(char *destPath)
+{
+    if (destPath == NULL)
+    {
+        return NULL;
+    }
+
+    int length = strlen(destPath);
+    int maxPostfixLength = 16;
+    int resLength = length + maxPostfixLength;
+    char *res = (char *)malloc((resLength + 1) * sizeof(char));
+
+    if (!is_file_exists(destPath))
+    {
+        strcpy(res, destPath);
+        return res;
+    }
+
+    char *destCopy = (char *)malloc((length + 1) * sizeof(char));
+    strcpy(destCopy, destPath);
+
+    char *extention = (char *)malloc((length + 1) * sizeof(char));
+    extention[0] = '\0';
+
+    for (int i = length - 1; i >= 0; i--)
+    {
+        if (destPath[i] == SERIALIZE_SEP)
+        {
+            break;
+        }
+        char ch = destPath[i];
+        if (destPath[i] == '.')
+        {
+            destCopy[i] = '\0';
+            strcpy(extention, destPath + i + 1);
+            break;
+        }
+    }
+
+    int maxIterations = 1000;
+    bool isFind = false;
+    for (int fileInd = 1; fileInd < maxIterations; fileInd++)
+    {
+        if (extention[0] == '\0')
+        {
+            snprintf(res, resLength, "%s(%d)", destCopy, fileInd);
+        }
+        else
+        {
+            snprintf(res, resLength, "%s(%d).%s", destCopy, fileInd, extention);
+        }
+        if (!is_file_exists(res))
+        {
+            isFind = true;
+            break;
+        }
+    }
+    free(destCopy);
+    free(extention);
+    if (isFind)
+    {
+        return res;
+    }
+    else
+    {
+        free(res);
+        return NULL;
+    }
+}
+
+int test()
 {
     // TPathArr paths;
     // paths.pathsCount = 3;
@@ -435,13 +582,17 @@ static int test()
     // paths.paths[2] = "/check/in/test/name";
 
     // TPathArr res = serialize_dir_paths(paths, "/check/in");
-    char *absCurDir = get_real_path("../../../../../");
-    TPathArr paths = list_dir(absCurDir);
-    TPathArr res = serialize_dir_paths(paths, absCurDir);
-    for (int i = 0; i < res.pathsCount; i++)
-    {
-        printf("%s\n", res.paths[i]);
-    }
+    // char *absCurDir = get_real_path("../../../../../");
+    // TPathArr paths = list_dir(absCurDir);
+    // TPathArr res = serialize_dir_paths(paths, absCurDir);
+    // for (int i = 0; i < res.pathsCount; i++)
+    // {
+    //     printf("%s\n", res.paths[i]);
+    // }
+    // return 0;
+    char check[1000] = "main.c";
+    char *res = get_free_file_path(check);
+    printf("%s", res);
     return 0;
 }
 

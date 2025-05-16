@@ -19,7 +19,8 @@ TArchivatorResponse *run_archivator(TSetupSettings *settings)
     response->errorMessage = (char *)malloc(ERROR_LENGTH * sizeof(char));
     response->isError = false;
 
-    if (UNDEFINED_SYSTEM){
+    if (UNDEFINED_SYSTEM)
+    {
         strcpy(response->errorMessage, "Your system is not supported");
         response->isError = true;
         return response;
@@ -45,8 +46,9 @@ TArchivatorResponse *run_archivator(TSetupSettings *settings)
     {
         archivate_mode_run(settings, response);
     }
-    else
+    else if (settings->mode == dearchivateMode)
     {
+        dearchivate_mode_run(settings, response);
     }
     return response;
 }

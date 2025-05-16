@@ -9,13 +9,16 @@ int main(int argc, char **argv)
     if (settings->isError)
     {
         fprintf(stderr, "ERROR: %s\n", settings->errorMessage);
-        return -1;
+        return EXIT_FAILURE;
     }
+    int returnCode = EXIT_SUCCESS;
     TArchivatorResponse *resp = run_archivator(settings);
     if (resp->isError)
     {
         fprintf(stderr, "%s\n", resp->errorMessage);
+        returnCode = EXIT_FAILURE;
     }
     delete_response(resp);
     delete_settings(settings);
+    return returnCode;
 }
