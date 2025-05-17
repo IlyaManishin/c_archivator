@@ -26,22 +26,6 @@ TArchivatorResponse *run_archivator(TSetupSettings *settings)
         return response;
     }
 
-    if (settings->infoDestPath != NULL)
-    {
-        settings->_infoDest = fopen(settings->infoDestPath, "a");
-
-        if (settings->_infoDest == NULL)
-        {
-            response->isError = true;
-            strcpy(response->errorMessage, "Invalid logging path");
-            return response;
-        }
-    }
-    else
-    {
-        settings->_infoDest = stdout;
-    }
-
     if (settings->mode == archivateMode)
     {
         archivate_mode_run(settings, response);
@@ -49,6 +33,10 @@ TArchivatorResponse *run_archivator(TSetupSettings *settings)
     else if (settings->mode == dearchivateMode)
     {
         dearchivate_mode_run(settings, response);
+    }
+    else if (settings->mode == infoMode || settings->mode == checkMode)
+    {
+        get_archive_info(settings, response);
     }
     return response;
 }

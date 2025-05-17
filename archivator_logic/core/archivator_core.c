@@ -41,7 +41,7 @@ typedef struct
     uint64_t compressSizeBytes;
     uint64_t baseSizeBytes;
 
-    int isValid;
+    bool isValid;
 } THeaderData;
 
 static TFrequenciesData count_file_frequencies(FILE *file)
@@ -305,10 +305,10 @@ static bool dearchivate_file_with_tree(TBinReadBuffer *readBuffer, TTreePoint *t
     return true;
 }
 
-TFileData dearchivate_file(FILE *archiveFile, char* absDestDir, TArchivatorResponse *errorDest)
+TFileData read_file_info(FILE *archiveFile, TArchivatorResponse *errorDest)
 {
     TFileData result;
-    int destDirLength = strlen(absDestDir);
+    result._isFreePathNeeded = false;
 
     THeaderData headerData = read_header_data(archiveFile);
     if (!headerData.isValid)
@@ -316,74 +316,130 @@ TFileData dearchivate_file(FILE *archiveFile, char* absDestDir, TArchivatorRespo
         goto invalid_archive_error;
     }
     TBinReadBuffer *readBuffer = get_read_buffer(archiveFile);
+    char *destRelPath = buffer_read_string(readBuffer);
+    if (destRelPath == NULL)
+    {
+        delete_read_buffer(readBuffer);
+        goto invalid_archive_error;
+    }
 
+    uint64_t bytesRemainCount = headerData.compressSizeBytes - readBuffer->bytesCount;
+    int bit;
+    int bitsCount = bytesRemainCount * BYTE_LENGTH + readBuffer->length;
+    for (int i = 0; i < bitsCount; i++)
+    {
+        bit = pop_bit_from_read_buffer(readBuffer);
+        if (bit == -1){
+            delete_read_buffer(readBuffer);
+            goto invalid_archive_error;
+        }
+    }
+    uint64_t checkSum = readBuffer->checkSum;
+    result.isValidCheckSum = (checkSum == headerData.checkSum);
+
+    delete_read_buffer(readBuffer);
+    result.path = destRelPath;
+    result.baseSizeBytes = headerData.baseSizeBytes;
+    result.compressSizeBytes = headerData.compressSizeBytes;
+    result._isFreePathNeeded = true;
+    return result;
+    
+invalid_archive_error:
+    strcpy(errorDest->errorMessage, "Invalid archive");
+    errorDest->isError = true;
+    return result;
+}
+
+TFileData dearchivate_file(FILE *archiveFile, char *absDestDir, TArchivatorResponse *errorDest)
+{
+    TFileData result;
+    result._isFreePathNeeded = false;
+
+    int destDirLength = strlen(absDestDir);
+
+    THeaderData headerData = read_header_data(archiveFile);
+    if (!headerData.isValid)
+    {
+        goto invalid_archive_error;
+    }
+
+    TBinReadBuffer *readBuffer = get_read_buffer(archiveFile);
     char *destRelPath = buffer_read_string(readBuffer);
     if (destRelPath == NULL)
     {
         goto invalid_archive_error;
     }
-    char* destPath = path_concat(absDestDir, destRelPath, SERIALIZE_SEP);
-    printf("%s\n\n", destPath);
-    TTreePoint *tree = read_tree_from_file(readBuffer);
-    if (tree == NULL)
-    {
-        goto invalid_archive_error;
-    }
+
+    char *destPath = path_concat(absDestDir, destRelPath, SERIALIZE_SEP);
+    free(destRelPath);
 
     int res = create_dirs_for_file(destPath);
     if (res == -1)
     {
-        delete_tree(tree);
         goto invalid_file_path_error;
     }
     char *freePath = get_free_file_path(destPath);
+    free(destPath);
     if (freePath == NULL)
     {
-        delete_tree(tree);
         goto invalid_file_path_error;
     }
 
     FILE *destFile = fopen(freePath, "wb");
-    if (destFile == NULL){
-        delete_tree(tree);
+    if (destFile == NULL)
+    {
+        free(freePath);
         goto invalid_file_path_error;
     }
-    bool isSuccess = dearchivate_file_with_tree(readBuffer, tree, destFile, headerData.compressSizeBytes);
-    if (!isSuccess)
+
+    TTreePoint *tree = read_tree_from_file(readBuffer);
+    if (tree == NULL)
     {
-        remove(destRelPath);
-        delete_tree(tree);
+        free(freePath);
         fclose(destFile);
         goto invalid_archive_error;
     }
+
+    bool isSuccess = dearchivate_file_with_tree(readBuffer, tree, destFile, headerData.compressSizeBytes);
+    delete_tree(tree);
     fclose(destFile);
+    if (!isSuccess)
+    {
+        remove(freePath);
+        free(freePath);
+        goto invalid_archive_error;
+    }
 
     result.path = freePath;
+    result._isFreePathNeeded = true;
     result.baseSizeBytes = headerData.baseSizeBytes;
     result.compressSizeBytes = headerData.compressSizeBytes;
+    result.isValidCheckSum = true;
     return result;
 
 invalid_archive_error:
+    delete_read_buffer(readBuffer);
     strcpy(errorDest->errorMessage, "Invalid archive");
     errorDest->isError = true;
     return result;
 
 invalid_file_path_error:
+    delete_read_buffer(readBuffer);
     snprintf(errorDest->errorMessage, ERROR_LENGTH, "Can't save file: %s", destRelPath);
     errorDest->isError = true;
     return result;
 }
 
-static void write_header_data(TBinWriteBuffer *buffer, THeaderData data, long headerPos)
+static void write_header_data(FILE* destFile, THeaderData data, long headerPos)
 {
-    long endPos = write_buffer_ftell(buffer);
-    write_buffer_fseek_cur(buffer, headerPos - endPos);
-    buffer_write_arg(buffer, &data.checkSum, sizeof(uint64_t));
-    buffer_write_arg(buffer, &data.compressSizeBytes, sizeof(uint64_t));
-    buffer_write_arg(buffer, &data.baseSizeBytes, sizeof(uint64_t));
+    long endPos = ftell(destFile);
+    fseek(destFile, headerPos, SEEK_SET);
 
-    long curPos = write_buffer_ftell(buffer);
-    write_buffer_fseek_cur(buffer, endPos - curPos);
+    fwrite(&data.checkSum, sizeof(uint64_t), 1, destFile);
+    fwrite(&data.compressSizeBytes, sizeof(uint64_t), 1, destFile);
+    fwrite(&data.baseSizeBytes, sizeof(uint64_t), 1, destFile);
+
+    fseek(destFile, endPos, SEEK_SET);
 }
 
 TFileData archivate_file(char *sourcePath, char *serializedPath, FILE *archiveFile, TArchivatorResponse *errorDest)
@@ -406,9 +462,9 @@ TFileData archivate_file(char *sourcePath, char *serializedPath, FILE *archiveFi
 
     TBinWriteBuffer *writeBuffer = get_write_buffer(archiveFile);
 
-    long headerDataPos = write_buffer_ftell(writeBuffer);
+    long headerDataPos = ftell(archiveFile);
     size_t headerDataOffset = 3 * sizeof(uint64_t);
-    write_buffer_fseek_cur(writeBuffer, headerDataOffset);
+    fseek(archiveFile, headerDataOffset, SEEK_CUR);
 
     buffer_write_string(writeBuffer, serializedPath);
 
@@ -419,11 +475,13 @@ TFileData archivate_file(char *sourcePath, char *serializedPath, FILE *archiveFi
     headerData.checkSum = writeBuffer->checkSum;
     headerData.compressSizeBytes = writeBuffer->bytesCount;
     headerData.baseSizeBytes = fileLength;
-    write_header_data(writeBuffer, headerData, headerDataPos);
+    write_header_data(archiveFile, headerData, headerDataPos);
 
     result.compressSizeBytes = writeBuffer->bytesCount;
     result.baseSizeBytes = fileLength;
+    result.isValidCheckSum = true;
 
+    delete_write_buffer(writeBuffer);
     free(data.codes);
     free(data.freqsData.frequencies);
     delete_tree(data.codeTree);

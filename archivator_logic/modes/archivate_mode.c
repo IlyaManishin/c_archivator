@@ -8,6 +8,7 @@
 #include "../include/core_api.h"
 #include "../include/pathlib.h"
 
+#define IS_MAC_OS 1
 void write_headers_to_archive(FILE *archive, TPathArr paths)
 {
     fwrite(&paths.pathsCount, sizeof(uint32_t), 1, archive);
@@ -27,7 +28,6 @@ bool is_valid_paths(TPathArr paths, TArchivatorResponse *resp)
     return true;
 }
 
-// check memory!!!!
 TPathArr get_paths_to_archivate(TSetupSettings *settings, TArchivatorResponse *resp)
 {
     TPathArr paths;
@@ -35,7 +35,7 @@ TPathArr get_paths_to_archivate(TSetupSettings *settings, TArchivatorResponse *r
     {
         if (!is_dir_exists(settings->dirToArchivate))
         {
-            snprintf(resp->errorMessage, ERROR_LENGTH, "Invalid directory to archivate: %s", settings->dirToArchivate);
+            snprintf(resp->errorMessage, ERROR_LENGTH, "Invalid directory to archivate: %s\n", settings->dirToArchivate);
             resp->isError = true;
             return paths;
         }
@@ -43,7 +43,7 @@ TPathArr get_paths_to_archivate(TSetupSettings *settings, TArchivatorResponse *r
         char *absArchivateDir = get_real_path(settings->dirToArchivate);
         if (absArchivateDir == NULL)
         {
-            strcpy(resp->errorMessage, "Invalid archivate directory");
+            strcpy(resp->errorMessage, "Invalid archivate directory\n");
             resp->isError = true;
             return paths;
         }
@@ -65,7 +65,7 @@ TPathArr get_paths_to_archivate(TSetupSettings *settings, TArchivatorResponse *r
         }
 
         resp->isError = true;
-        resp->errorMessage = "No files to archivate!";
+        resp->errorMessage = "No files to archivate\n";
         return paths;
     }
     if (!is_valid_paths(paths, resp))
@@ -90,28 +90,23 @@ static void write_result(TFileData data, TSetupSettings *settings)
            data.baseSizeBytes, (long double)data.baseSizeBytes / 1024 / 1024,
            data.compressSizeBytes, (long double)data.compressSizeBytes / 1024 / 1024);
     printf("\n");
-    // bool isInfo = settings->withInfo;
-    // bool isConsoleInfo = false;
-    // if (isInfo && settings->_infoDest == stdout)
-    // {
-    //     isConsoleInfo = true;
-    // }
+
 }
 
 void archivate_mode_run(TSetupSettings *settings, TArchivatorResponse *respDest)
 {
     if (IS_WINDOWS)
     {
-        strcpy(respDest->errorMessage, "Your system is not supported. You might buy a good device");
+        strcpy(respDest->errorMessage, "Your system is not supported. You might buy a good device\n");
         respDest->isError = true;
         return;
     }
-
+    
     char *destPath = settings->archivePath;
     FILE *archive = fopen(destPath, "wb");
     if (archive == NULL)
     {
-        snprintf(respDest->errorMessage, ERROR_LENGTH, "Can't create archive with path %s", destPath);
+        snprintf(respDest->errorMessage, ERROR_LENGTH, "Can't create archive with path %s\n", destPath);
         respDest->isError = true;
         return;
     }
@@ -132,7 +127,7 @@ void archivate_mode_run(TSetupSettings *settings, TArchivatorResponse *respDest)
     }
     if (serializedPaths.pathsCount == 0)
     {
-        snprintf(respDest->errorMessage, ERROR_LENGTH, "Can`t save paths to archive");
+        snprintf(respDest->errorMessage, ERROR_LENGTH, "Can`t save paths to archive\n");
         respDest->isError = true;
         goto exit;
     }
@@ -157,8 +152,5 @@ exit:
     {
         delete_path_arr(paths);
     }
-    if (settings->_absDirToArchivate != NULL)
-    {
-        free(settings->_absDirToArchivate);
-    }
+    delete_path_arr(serializedPaths);
 }

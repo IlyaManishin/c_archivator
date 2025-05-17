@@ -3,7 +3,8 @@
 
 #include "../include/types.h"
 
-void archivate_mode_run(TSetupSettings *settings, TArchivatorResponse *respDest);
-void dearchivate_mode_run(TSetupSettings *settings, TArchivatorResponse *respDest);
+extern void archivate_mode_run(TSetupSettings *settings, TArchivatorResponse *respDest);
+extern void dearchivate_mode_run(TSetupSettings *settings, TArchivatorResponse *respDest);
+extern void get_archive_info(TSetupSettings *settings, TArchivatorResponse *respDest);
 
 #endif

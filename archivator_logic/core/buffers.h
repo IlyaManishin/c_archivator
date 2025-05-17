@@ -19,10 +19,8 @@ extern void delete_write_buffer(TBinWriteBuffer *buffer);
 extern void write_buffer_push(TBinWriteBuffer *buffer, int bit);
 extern void flash_write_buffer(TBinWriteBuffer *buffer);
 
-extern long write_buffer_ftell(TBinWriteBuffer *buffer);
-extern void write_buffer_fseek_cur(TBinWriteBuffer *buffer, long pos);
-extern void buffer_write_arg(TBinWriteBuffer *buffer, void *arg_ptr, size_t size);
 extern void buffer_write_string(TBinWriteBuffer *buffer, char *s);
+void buffer_write_arg(TBinWriteBuffer *buffer, void *arg_ptr, size_t size);
 
 typedef struct
 {
@@ -31,6 +29,7 @@ typedef struct
     char byte;
 
     uint64_t checkSum;
+    uint64_t bytesCount;
 } TBinReadBuffer;
 
 extern TBinReadBuffer *get_read_buffer(FILE *ifile);

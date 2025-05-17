@@ -13,7 +13,8 @@ typedef enum
     archivateMode,
     dearchivateMode,
     infoMode,
-    undefinedMode
+    checkMode,
+    undefinedMode,
 } EArchivatorMode;
 
 typedef struct
@@ -27,14 +28,10 @@ typedef struct
     char *archivePath;
     char *destDir;
 
-    bool withInfo;
-    char *infoDestPath;
-    FILE *_infoDest;
+    bool withInfo; 
 
     bool isError;
     char *errorMessage;
-
-    char* _absDirToArchivate;
 } TSetupSettings;
 
 typedef struct
@@ -50,6 +47,7 @@ typedef struct
 
     uint64_t baseSizeBytes;
     uint64_t compressSizeBytes;
+    bool isValidCheckSum;
 } TFileData;
 
 #endif

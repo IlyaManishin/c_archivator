@@ -29,7 +29,6 @@ TSetupSettings *get_settings()
     TSetupSettings *settings = (TSetupSettings *)malloc(sizeof(TSetupSettings));
     settings->mode = null;
     settings->withInfo = false;
-    settings->infoDestPath = NULL;
 
     settings->dirToArchivate = NULL;
     settings->filesCount = 0;
@@ -41,7 +40,6 @@ TSetupSettings *get_settings()
     settings->isError = false;
     settings->errorMessage = (char *)malloc(ERROR_LENGTH * sizeof(char));
 
-    settings->_absDirToArchivate = NULL;
     return settings;
 }
 
@@ -149,19 +147,19 @@ static int is_arg(TTokenArr *arr, int index)
 
 static EArchivatorMode get_mode_by_option(char optValue)
 {
-    if (optValue == 'a')
+    switch (optValue)
     {
+    case 'a':
         return archivateMode;
-    }
-    if (optValue == 'l')
-    {
+    case 'l':
         return infoMode;
-    }
-    if (optValue == 'e')
-    {
+    case 'e':
         return dearchivateMode;
+    case 'c':
+        return checkMode;
+    default:
+        return undefinedMode;
     }
-    return undefinedMode;
 }
 
 static int is_mode_option(char optValue)
@@ -185,9 +183,6 @@ void print_settings(TSetupSettings *settings)
 
     printf("archive path: %s\n", settings->archivePath != NULL ? settings->archivePath : "");
     printf("dest dir: %s\n", settings->destDir != NULL ? settings->destDir : "");
-
-    printf("with info: %d\n", settings->withInfo);
-    printf("log dir: %s\n", settings->infoDestPath != NULL ? settings->infoDestPath : "");
 
     printf("!!!\n");
     printf("Is error: %d\n", settings->isError);
@@ -263,16 +258,6 @@ TSetupSettings *read_setup_settings(int argc, char **argv)
             settings->filesToArchivate = read_args_after_option(tokensArr, i + 1);
             i += filesCount;
         }
-        else if (token.optionValue == 'i')
-        {
-            settings->withInfo = true;
-            if (is_arg(tokensArr, i + 1))
-            {
-                char *loggingPath = tokensArr->tokens[i + 1].argValue;
-                settings->infoDestPath = loggingPath;
-                i++;
-            }
-        }
         else if (token.optionValue == 'r')
         {
             if (!is_arg(tokensArr, i + 1))
@@ -294,6 +279,10 @@ TSetupSettings *read_setup_settings(int argc, char **argv)
             }
             settings->destDir = tokensArr->tokens[i + 1].argValue;
             i++;
+        }
+        else if (token.optionValue == 'i')
+        {
+            settings->withInfo = true;
         }
         else if (is_mode_option(token.optionValue))
         {
@@ -317,6 +306,6 @@ exit:
     free(tokensArr->tokens);
     free(tokensArr);
 
-    print_settings(settings);
+    // print_settings(settings);
     return settings;
 }

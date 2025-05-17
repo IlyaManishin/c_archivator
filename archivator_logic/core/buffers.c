@@ -32,12 +32,16 @@ void flash_write_buffer(TBinWriteBuffer *buffer)
         buffer->byte = buffer->byte << 1;
     }
     write_byte_as_bin_to_file(buffer->destFile, buffer->byte);
-    buffer->bytesCount += BYTE_LENGTH;
+    buffer->bytesCount += 1;
     buffer->length = 0;
 }
 
 void write_buffer_push(TBinWriteBuffer *buffer, int bit)
 {
+    if (bit)
+    {
+        buffer->checkSum++;
+    }
     if (buffer->length == BYTE_LENGTH)
     {
         flash_write_buffer(buffer);
@@ -46,27 +50,11 @@ void write_buffer_push(TBinWriteBuffer *buffer, int bit)
         return;
     }
     buffer->byte = (buffer->byte << 1) + bit;
-    if (bit)
-    {
-        buffer->checkSum++;
-    }
     buffer->length++;
-}
-
-long write_buffer_ftell(TBinWriteBuffer *buffer)
-{
-    return ftell(buffer->destFile);
-}
-
-void write_buffer_fseek_cur(TBinWriteBuffer *buffer, long pos)
-{
-    fseek(buffer->destFile, pos, SEEK_CUR);
 }
 
 void buffer_write_arg(TBinWriteBuffer *buffer, void *arg_ptr, size_t size)
 {
-    int argCheckSum = 0;
-
     uchar *byte = (uchar *)arg_ptr;
     for (int byteInd = 0; byteInd < size; byteInd++)
     {
@@ -74,15 +62,12 @@ void buffer_write_arg(TBinWriteBuffer *buffer, void *arg_ptr, size_t size)
         {
             if (((*byte) >> i) & 1)
             {
-                argCheckSum++;
+                buffer->checkSum++;
             }
         }
         byte++;
     }
-
-    buffer->checkSum += argCheckSum;
     buffer->bytesCount += size;
-
     fwrite(arg_ptr, size, 1, buffer->destFile);
 }
 
@@ -102,6 +87,7 @@ TBinReadBuffer *get_read_buffer(FILE *ifile)
 {
     TBinReadBuffer *buffer = (TBinReadBuffer *)malloc(sizeof(TBinReadBuffer));
     buffer->readFile = ifile;
+    buffer->bytesCount = 0;
 
     int res = fread(&buffer->byte, sizeof(char), 1, ifile);
     if (res == 0)
@@ -111,6 +97,7 @@ TBinReadBuffer *get_read_buffer(FILE *ifile)
     else
     {
         buffer->length = BYTE_LENGTH;
+        buffer->bytesCount++;
     }
     buffer->checkSum = 0;
     return buffer;
@@ -125,6 +112,7 @@ int pop_bit_from_read_buffer(TBinReadBuffer *buffer)
             return -1;
 
         buffer->length = BYTE_LENGTH;
+        buffer->bytesCount++;
     }
 
     int bit = (buffer->byte >> (buffer->length - 1)) & 1;
@@ -149,6 +137,8 @@ char *buffer_read_string(TBinReadBuffer *readBuffer)
     char ch;
     while (fread(&ch, sizeof(char), 1, readBuffer->readFile) != 0)
     {
+        readBuffer->bytesCount++;
+
         stringBuffer[length] = (char)ch;
         length++;
         if (length > MAX_STRING_LENGTH)
@@ -157,6 +147,13 @@ char *buffer_read_string(TBinReadBuffer *readBuffer)
             return NULL;
         }
 
+        for (int i = 0; i < BYTE_LENGTH; i++)
+        {
+            if (((int)ch >> i) & 1)
+            {
+                readBuffer->checkSum++;
+            }
+        }
         if (ch == '\0')
         {
             return stringBuffer;
@@ -178,8 +175,9 @@ char *buffer_read_string(TBinReadBuffer *readBuffer)
     return NULL;
 }
 
-size_t buffer_read_arg(TBinReadBuffer *buffer, void* arg, size_t size)
-{   
+size_t buffer_read_arg(TBinReadBuffer *buffer, void *arg, size_t size)
+{
+    buffer->bytesCount += size;
     return fread(arg, size, 1, buffer->readFile);
 }
 

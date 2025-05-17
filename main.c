@@ -9,6 +9,7 @@ int main(int argc, char **argv)
     if (settings->isError)
     {
         fprintf(stderr, "ERROR: %s\n", settings->errorMessage);
+        delete_settings(settings);
         return EXIT_FAILURE;
     }
     int returnCode = EXIT_SUCCESS;

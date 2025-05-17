@@ -12,13 +12,13 @@ void dearchivate_mode_run(TSetupSettings *settings, TArchivatorResponse *respDes
 {
     if (settings->archivePath == NULL)
     {
-        strcpy(respDest->errorMessage, "No archive path");
+        strcpy(respDest->errorMessage, "No archive path\n");
         respDest->isError = true;
         return;
     }
     if (!is_file_exists(settings->archivePath))
     {
-        snprintf(respDest->errorMessage, ERROR_LENGTH, "Can`t open archive: %s", settings->archivePath);
+        snprintf(respDest->errorMessage, ERROR_LENGTH, "Can`t open archive: %s\n", settings->archivePath);
         respDest->isError = true;
         return;
     }
@@ -26,7 +26,13 @@ void dearchivate_mode_run(TSetupSettings *settings, TArchivatorResponse *respDes
     FILE *archiveFile = fopen(settings->archivePath, "rb");
     uint32_t filesCount;
     size_t res = fread(&filesCount, sizeof(uint32_t), 1, archiveFile);
-
+    if (res == 0)
+    {
+        strcpy(respDest->errorMessage, "Invalid archive\n");
+        respDest->isError = true;
+        return;
+    }
+    
     char *absDestDir;
     if (settings->destDir != NULL)
     {
@@ -37,12 +43,7 @@ void dearchivate_mode_run(TSetupSettings *settings, TArchivatorResponse *respDes
         absDestDir = (char *)malloc(1 * sizeof(char));
         absDestDir[0] = '\0';
     }
-    if (res == 0)
-    {
-        strcpy(respDest->errorMessage, "Invalid archive");
-        respDest->isError = true;
-        return;
-    }
+
     for (int i = 0; i < filesCount; i++)
     {
         TFileData result = dearchivate_file(archiveFile, absDestDir, respDest);
