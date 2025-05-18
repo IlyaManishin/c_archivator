@@ -124,7 +124,7 @@ void get_archive_info(TSetupSettings *settings, TArchivatorResponse *respDest)
         if (respDest->isError)
         {
             delete_file_data(result);
-            goto info_exit;
+            goto exit;
         }
         if (!result.isValidCheckSum)
         {
@@ -132,7 +132,7 @@ void get_archive_info(TSetupSettings *settings, TArchivatorResponse *respDest)
             respDest->isError = true;
 
             delete_file_data(result);
-            goto info_exit;
+            goto exit;
         }
         if (settings->mode == infoMode)
         {
@@ -150,6 +150,6 @@ void get_archive_info(TSetupSettings *settings, TArchivatorResponse *respDest)
         print_file_data(sumData, filesCount);
     }
 
-info_exit:
+exit:
     fclose(archiveFile);
 }

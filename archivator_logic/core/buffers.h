@@ -37,6 +37,7 @@ extern void delete_read_buffer(TBinReadBuffer *buffer);
 extern int pop_bit_from_read_buffer(TBinReadBuffer *buffer);
 extern char *buffer_read_string(TBinReadBuffer* readBuffer);
 extern size_t buffer_read_arg(TBinReadBuffer *buffer, void* arg, size_t size);
+void flash_read_buffer(TBinReadBuffer *buffer);
 
 
 #endif

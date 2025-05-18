@@ -161,121 +161,6 @@ static void replace_path_sep(char *path, char oldSep, char newSep)
     }
 }
 
-static TSplittedPath path_to_splitted(char *path, char *buffer)
-{
-    int pathLength = strlen(path);
-
-    int isFreeBuffer = false;
-    if (buffer == NULL)
-    {
-        buffer = (char *)malloc((pathLength + 1) * sizeof(char));
-        isFreeBuffer = true;
-    }
-
-    TSplittedPath sPath;
-    sPath.partsCount = 0;
-
-    int minPartsSize = 1;
-    for (int i = 0; i < pathLength; i++)
-    {
-        if (path[i] == PATH_SEP)
-        {
-            minPartsSize++;
-        }
-    }
-    sPath.parts = (char **)malloc(minPartsSize * sizeof(char *));
-
-    int partLength = 0;
-    for (int i = 0; i <= pathLength; i++)
-    {
-        if ((i == pathLength || path[i] == PATH_SEP) && partLength != 0)
-        {
-            buffer[partLength] = '\0';
-            sPath.parts[sPath.partsCount] = (char *)malloc((partLength + 1) * sizeof(char));
-            strcpy(sPath.parts[sPath.partsCount], buffer);
-
-            sPath.partsCount++;
-            partLength = 0;
-        }
-        if (i == pathLength)
-        {
-            break;
-        }
-        if (path[i] == PATH_SEP)
-        {
-            continue;
-        }
-        buffer[partLength] = path[i];
-        partLength++;
-    }
-    if (isFreeBuffer)
-    {
-        free(buffer);
-    }
-    return sPath;
-}
-
-static TSplittedPath *split_paths(TPathArr paths)
-{
-    TSplittedPath *result = (TSplittedPath *)malloc(paths.pathsCount * sizeof(TSplittedPath));
-
-    char *pathBuffer = (char *)malloc((PATH_MAX + 1) * sizeof(char));
-    for (int i = 0; i < paths.pathsCount; i++)
-    {
-        result[i] = path_to_splitted(paths.paths[i], pathBuffer);
-    }
-    free(pathBuffer);
-    return result;
-}
-
-static void delete_splitted_paths(TSplittedPath *sPaths, int pathCount)
-{
-    if (sPaths == NULL || pathCount == 0)
-    {
-        return;
-    }
-
-    for (int i = 0; i < pathCount; i++)
-    {
-        TSplittedPath path = sPaths[i];
-        for (int j = 0; j < path.partsCount; j++)
-        {
-            free(path.parts[j]);
-        }
-    }
-    free(sPaths);
-}
-
-static int get_common_dirs_count(TSplittedPath *sPaths, int sPathCount)
-{
-    if (sPathCount == 0)
-        return 0;
-
-    int maxCommon = -1;
-    for (int i = 0; i < sPathCount; i++)
-    {
-        if (maxCommon == -1)
-        {
-            maxCommon = sPaths[i].partsCount;
-            continue;
-        }
-        maxCommon = min(maxCommon, sPaths[i].partsCount);
-    }
-    for (int i = 0; i < maxCommon; i++)
-    {
-        char *part = sPaths[0].parts[i];
-        for (int pathInd = 1; pathInd < sPathCount; pathInd++)
-        {
-            if (strcmp(part, sPaths[pathInd].parts[i]) != 0)
-            {
-                int commonDirs = i;
-                return i;
-            }
-        }
-    }
-    return maxCommon;
-}
-
 static void delete_double_seps(TPathArr paths)
 {
     for (int i = 0; i < paths.pathsCount; i++)
@@ -301,69 +186,25 @@ static void delete_double_seps(TPathArr paths)
     }
 }
 
-static TPathArr join_splitted_paths(TSplittedPath *sPaths, int pathsCount, int commonCount)
-{
-    TPathArr result;
-    result.pathsCount = pathsCount;
-    result.paths = (char **)malloc(pathsCount * sizeof(char *));
-    result.isFreeNeeded = true;
-
-    for (int pathInd = 0; pathInd < pathsCount; pathInd++)
-    {
-        TSplittedPath sPath = sPaths[pathInd];
-        int fullLength = 0;
-        for (int i = 0; i < sPath.partsCount; i++)
-        {
-            fullLength += strlen(sPath.parts[i]);
-        }
-        char *joinedPath = (char *)malloc((fullLength + 1) * sizeof(char));
-        int curIndex = 0;
-        for (int i = 0; i < sPath.partsCount; i++)
-        {
-            char *part = sPath.parts[i];
-            int partLength = strlen(part);
-            for (int j = 0; j < partLength; j++)
-            {
-                joinedPath[curIndex] = part[j];
-                curIndex++;
-            }
-        }
-        joinedPath[curIndex] = '\0';
-    }
-    return result;
-}
-
 static char *get_parent(char *path)
 {
     int length = strlen(path);
-
-    TSplittedPath sPath = path_to_splitted(path, NULL);
-    int partsCount = sPath.partsCount;
-    if (partsCount == 0)
+    int endInd = -1;
+    for (int i = length - 1; i >= 0; i--)
+    {
+        if (path[i] == SERIALIZE_SEP)
+        {
+            endInd = i;
+            break;
+        }
+    }
+    if (endInd == -1)
     {
         return NULL;
     }
-    char *result = (char *)malloc(length * sizeof(char));
-    int curIndex = 0;
-    for (int i = 0; i < partsCount - 1; i++)
-    {
-        char *part = sPath.parts[i];
-        int partLength = strlen(part);
-        for (int j = 0; j < partLength; j++)
-        {
-            result[curIndex] = part[j];
-            curIndex++;
-        }
-        if (i != partsCount - 1)
-        {
-            result[curIndex] = PATH_SEP;
-            curIndex++;
-        }
-    }
-    for (int i = 0; i < partsCount; i++)
-    {
-        free(sPath.parts[i]);
-    }
+    char *result = (char *)malloc((endInd + 2) * sizeof(char));
+    strncpy(result, path, endInd + 1);
+    result[endInd + 1] = '\0';
     return result;
 }
 
@@ -446,15 +287,19 @@ TPathArr serialize_files_paths(TPathArr paths)
 int create_dirs_for_file(char *filePath)
 {
     char *fileDir = get_parent(filePath);
+    if (fileDir == NULL)
+    {
+        return 0;
+    }
     int length = strlen(fileDir);
     char *buffer = (char *)malloc((length + 1) * sizeof(char));
     for (int i = 0; i < length; i++)
     {
-        if (filePath[i] == SERIALIZE_SEP)
+        if (fileDir[i] == SERIALIZE_SEP)
         {
             if (i != 0)
             {
-                buffer[i + 1] = '\0';
+                buffer[i] = '\0';
                 int res = make_dir(buffer);
                 if (res == -1)
                 {
@@ -462,7 +307,7 @@ int create_dirs_for_file(char *filePath)
                 }
             }
         }
-        buffer[i] = filePath[i];
+        buffer[i] = fileDir[i];
     }
     free(buffer);
     return 0;
@@ -596,27 +441,3 @@ int test()
     return 0;
 }
 
-// static int path_to_relative(char *src, char *cwd, int cwdLength, char *dest)
-// {
-//     char absPath[1024];
-//     char *res;
-//     int cmpRes = strncmp(cwd, src, cwdLength);
-
-//     int srcLength = strlen(src);
-//     int destLength = srcLength - cmpRes;
-// }
-
-// static char *get_cwd()
-// {
-// #ifdef _WIN32
-//     return NULL;
-// #endif
-
-// #ifdef __linux__
-//     char *cwdPath = (char *)malloc(PATH_MAX * sizeof(char));
-//     getcwd(cwdPath, PATH_MAX);
-//     return cwdPath;
-// #endif
-
-//     return NULL;
-// }

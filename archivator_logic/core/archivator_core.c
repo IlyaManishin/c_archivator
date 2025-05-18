@@ -194,8 +194,7 @@ static TTreePoint *read_tree_from_file(TBinReadBuffer *buffer)
     TTreePoint *tree = get_tree_point();
     tree->type = pointType;
     read_tree_recursion(buffer, tree, 0, &codesCount);
-
-    delete_read_buffer(buffer);
+    flash_read_buffer(buffer);
     return tree;
 }
 
@@ -329,7 +328,8 @@ TFileData read_file_info(FILE *archiveFile, TArchivatorResponse *errorDest)
     for (int i = 0; i < bitsCount; i++)
     {
         bit = pop_bit_from_read_buffer(readBuffer);
-        if (bit == -1){
+        if (bit == -1)
+        {
             delete_read_buffer(readBuffer);
             goto invalid_archive_error;
         }
@@ -343,7 +343,7 @@ TFileData read_file_info(FILE *archiveFile, TArchivatorResponse *errorDest)
     result.compressSizeBytes = headerData.compressSizeBytes;
     result._isFreePathNeeded = true;
     return result;
-    
+
 invalid_archive_error:
     strcpy(errorDest->errorMessage, "Invalid archive");
     errorDest->isError = true;
@@ -355,8 +355,6 @@ TFileData dearchivate_file(FILE *archiveFile, char *absDestDir, TArchivatorRespo
     TFileData result;
     result._isFreePathNeeded = false;
 
-    int destDirLength = strlen(absDestDir);
-
     THeaderData headerData = read_header_data(archiveFile);
     if (!headerData.isValid)
     {
@@ -367,6 +365,7 @@ TFileData dearchivate_file(FILE *archiveFile, char *absDestDir, TArchivatorRespo
     char *destRelPath = buffer_read_string(readBuffer);
     if (destRelPath == NULL)
     {
+        delete_read_buffer(readBuffer);
         goto invalid_archive_error;
     }
 
@@ -397,12 +396,14 @@ TFileData dearchivate_file(FILE *archiveFile, char *absDestDir, TArchivatorRespo
     {
         free(freePath);
         fclose(destFile);
+        delete_read_buffer(readBuffer);
         goto invalid_archive_error;
     }
 
-    bool isSuccess = dearchivate_file_with_tree(readBuffer, tree, destFile, headerData.compressSizeBytes);
+    bool isSuccess = dearchivate_file_with_tree(readBuffer, tree, destFile, headerData.baseSizeBytes);
     delete_tree(tree);
     fclose(destFile);
+    delete_read_buffer(readBuffer);
     if (!isSuccess)
     {
         remove(freePath);
@@ -418,19 +419,17 @@ TFileData dearchivate_file(FILE *archiveFile, char *absDestDir, TArchivatorRespo
     return result;
 
 invalid_archive_error:
-    delete_read_buffer(readBuffer);
     strcpy(errorDest->errorMessage, "Invalid archive");
     errorDest->isError = true;
     return result;
 
 invalid_file_path_error:
-    delete_read_buffer(readBuffer);
     snprintf(errorDest->errorMessage, ERROR_LENGTH, "Can't save file: %s", destRelPath);
     errorDest->isError = true;
     return result;
 }
 
-static void write_header_data(FILE* destFile, THeaderData data, long headerPos)
+static void write_header_data(FILE *destFile, THeaderData data, long headerPos)
 {
     long endPos = ftell(destFile);
     fseek(destFile, headerPos, SEEK_SET);

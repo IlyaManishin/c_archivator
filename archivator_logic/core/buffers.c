@@ -27,6 +27,10 @@ static void write_byte_as_bin_to_file(FILE *destFile, char byte)
 
 void flash_write_buffer(TBinWriteBuffer *buffer)
 {
+    if (buffer->length == 0)
+    {
+        return;
+    }
     for (int i = buffer->length; i < BYTE_LENGTH; i++)
     {
         buffer->byte = buffer->byte << 1;
@@ -77,6 +81,11 @@ void buffer_write_string(TBinWriteBuffer *buffer, char *s)
     buffer_write_arg(buffer, s, length);
 }
 
+void flash_read_buffer(TBinReadBuffer *buffer)
+{
+    buffer->length = 0;
+}
+
 void delete_write_buffer(TBinWriteBuffer *buffer)
 {
     flash_write_buffer(buffer);
@@ -88,18 +97,9 @@ TBinReadBuffer *get_read_buffer(FILE *ifile)
     TBinReadBuffer *buffer = (TBinReadBuffer *)malloc(sizeof(TBinReadBuffer));
     buffer->readFile = ifile;
     buffer->bytesCount = 0;
-
-    int res = fread(&buffer->byte, sizeof(char), 1, ifile);
-    if (res == 0)
-    {
-        buffer->length = 0;
-    }
-    else
-    {
-        buffer->length = BYTE_LENGTH;
-        buffer->bytesCount++;
-    }
+    buffer->length = 0;
     buffer->checkSum = 0;
+
     return buffer;
 }
 
@@ -129,17 +129,17 @@ char *buffer_read_string(TBinReadBuffer *readBuffer)
 {
     int baseBufferLength = 32;
     int capacity = baseBufferLength;
-    int length = 0;
     char *stringBuffer = malloc(capacity);
     if (!stringBuffer)
         return NULL;
 
     char ch;
+    int length = 0;
     while (fread(&ch, sizeof(char), 1, readBuffer->readFile) != 0)
     {
         readBuffer->bytesCount++;
 
-        stringBuffer[length] = (char)ch;
+        stringBuffer[length] = ch;
         length++;
         if (length > MAX_STRING_LENGTH)
         {
