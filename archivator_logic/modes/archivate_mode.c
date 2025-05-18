@@ -3,18 +3,21 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <inttypes.h>
 
 #include "../include/types.h"
 #include "../include/core_api.h"
 #include "../include/pathlib.h"
+#include "eta_progress.h"
 
 #define IS_MAC_OS 1
-void write_headers_to_archive(FILE *archive, TPathArr paths)
+
+static void write_headers_to_archive(FILE *archive, TPathArr paths)
 {
     fwrite(&paths.pathsCount, sizeof(uint32_t), 1, archive);
 }
 
-bool is_valid_paths(TPathArr paths, TArchivatorResponse *resp)
+static bool is_valid_paths(TPathArr paths, TArchivatorResponse *resp)
 {
     for (int i = 0; i < paths.pathsCount; i++)
     {
@@ -83,14 +86,26 @@ TPathArr get_paths_to_archivate(TSetupSettings *settings, TArchivatorResponse *r
     return paths;
 }
 
-static void write_result(TFileData data, TSetupSettings *settings)
+static void print_result(TFileData data, TEta *eta, int index)
 {
-    printf("added: %s\n", data.path);
-    printf("Base size: %lu bytes (%Lf MB), compressed size: %lu bytes (%Lf MB)\n",
-           data.baseSizeBytes, (long double)data.baseSizeBytes / 1024 / 1024,
-           data.compressSizeBytes, (long double)data.compressSizeBytes / 1024 / 1024);
-    printf("\n");
+    char line[MAX_LINE_LENGTH];
+    snprintf(line, MAX_LINE_LENGTH - 1, "Added: %s", data.path);
+    print_string_with_eta(eta, line);
+    update_eta(eta, index);
+    // printf("added: %s\n", data.path);
+    // printf("Base size: %lu bytes (%Lf MB), compressed size: %lu bytes (%Lf MB)\n",
+    //        data.baseSizeBytes, (long double)data.baseSizeBytes / 1024 / 1024,
+    //        data.compressSizeBytes, (long double)data.compressSizeBytes / 1024 / 1024);
+    // printf("\n");
+}
 
+char *add_archive_extention(char *path)
+{
+    size_t pathLength = strlen(path);
+    char *destPathWithExt = (char *)malloc(pathLength + strlen(ARCHIVE_EXTENTION) + 1);
+    strcpy(destPathWithExt, path);
+    strcpy(destPathWithExt + pathLength, ARCHIVE_EXTENTION);
+    return destPathWithExt;
 }
 
 void archivate_mode_run(TSetupSettings *settings, TArchivatorResponse *respDest)
@@ -101,15 +116,18 @@ void archivate_mode_run(TSetupSettings *settings, TArchivatorResponse *respDest)
         respDest->isError = true;
         return;
     }
-    
+
     char *destPath = settings->archivePath;
-    FILE *archive = fopen(destPath, "wb");
+    char *destPathWithExt = add_archive_extention(destPath);
+    FILE *archive = fopen(destPathWithExt, "wb");
     if (archive == NULL)
     {
         snprintf(respDest->errorMessage, ERROR_LENGTH, "Can't create archive with path %s\n", destPath);
         respDest->isError = true;
+        free(destPathWithExt);
         return;
     }
+    free(destPathWithExt);
 
     TPathArr paths = get_paths_to_archivate(settings, respDest);
     if (respDest->isError)
@@ -125,13 +143,15 @@ void archivate_mode_run(TSetupSettings *settings, TArchivatorResponse *respDest)
     {
         serializedPaths = serialize_files_paths(paths);
     }
+
     if (serializedPaths.pathsCount == 0)
     {
         snprintf(respDest->errorMessage, ERROR_LENGTH, "Can`t save paths to archive\n");
         respDest->isError = true;
         goto exit;
     }
-
+    uint64_t fullSize = 0;
+    TEta *eta = get_eta_progress(paths.pathsCount);
     write_headers_to_archive(archive, paths);
     for (int i = 0; i < paths.pathsCount; i++)
     {
@@ -141,11 +161,16 @@ void archivate_mode_run(TSetupSettings *settings, TArchivatorResponse *respDest)
         {
             remove(destPath);
             delete_file_data(result);
+            delete_eta(eta);
             goto exit;
         }
-        write_result(result, settings);
+        fullSize += result.baseSizeBytes;
+        print_result(result, eta, i + 1);
         delete_file_data(result);
     }
+    delete_eta(eta);
+    int fullSizeMB = fullSize / 1024 / 1024;
+    printf("TOTAL EXTRACTED: %" PRId64 " BYTES(%d MB)\n", fullSize, fullSizeMB);
 
 exit:
     if (paths.isFreeNeeded)
@@ -153,4 +178,5 @@ exit:
         delete_path_arr(paths);
     }
     delete_path_arr(serializedPaths);
+    return;
 }

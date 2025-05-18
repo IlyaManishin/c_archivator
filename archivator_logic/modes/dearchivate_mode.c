@@ -7,7 +7,15 @@
 #include "../include/types.h"
 #include "../include/core_api.h"
 #include "../include/pathlib.h"
+#include "eta_progress.h"
 
+static void print_result(TFileData data, TEta *eta, int index)
+{
+    char line[MAX_LINE_LENGTH];
+    snprintf(line, MAX_LINE_LENGTH - 1, "Extracted: %s", data.path);
+    print_string_with_eta(eta, line);
+    update_eta(eta, index);
+}
 void dearchivate_mode_run(TSetupSettings *settings, TArchivatorResponse *respDest)
 {
     if (settings->archivePath == NULL)
@@ -32,7 +40,7 @@ void dearchivate_mode_run(TSetupSettings *settings, TArchivatorResponse *respDes
         respDest->isError = true;
         return;
     }
-    
+
     char *absDestDir;
     if (settings->destDir != NULL)
     {
@@ -43,9 +51,10 @@ void dearchivate_mode_run(TSetupSettings *settings, TArchivatorResponse *respDes
         absDestDir = (char *)malloc(1 * sizeof(char));
         absDestDir[0] = '\0';
     }
-
+    TEta *eta = get_eta_progress(filesCount);
     for (int i = 0; i < filesCount; i++)
     {
         TFileData result = dearchivate_file(archiveFile, absDestDir, respDest);
+        print_result(result, eta, i + 1);
     }
 }

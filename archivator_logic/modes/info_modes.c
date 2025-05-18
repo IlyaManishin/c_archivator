@@ -25,7 +25,7 @@ typedef enum
 
 static int maxTerminalColumnSize;
 
-void print_string_column(char *s, int maxSize, bool withOffset, EPrintDirection dir)
+static void print_string_column(char *s, int maxSize, bool withOffset, EPrintDirection dir)
 {
     if (maxSize > maxTerminalColumnSize)
     {
@@ -59,7 +59,7 @@ void print_string_column(char *s, int maxSize, bool withOffset, EPrintDirection 
     }
 }
 
-void print_size_column(uint64_t sizeBytes, int maxSize, bool withOffset, EPrintDirection dir)
+static void print_size_column(uint64_t sizeBytes, int maxSize, bool withOffset, EPrintDirection dir)
 {
 
     char s[100];
@@ -68,7 +68,7 @@ void print_size_column(uint64_t sizeBytes, int maxSize, bool withOffset, EPrintD
     print_string_column(s, maxSize, withOffset, dir);
 }
 
-void print_header()
+static void print_header()
 {
     char pathColumn[] = "Path";
     char comprSizeColumn[] = "Compressed size";
@@ -80,7 +80,7 @@ void print_header()
     printf("\n");
 }
 
-void print_file_data(TFileData data, int index)
+static void print_file_data(TFileData data, int index)
 {
     if (index == 0)
     {

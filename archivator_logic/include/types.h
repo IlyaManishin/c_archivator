@@ -6,6 +6,7 @@
 #include <stdint.h>
 
 #define ERROR_LENGTH 256
+#define ARCHIVE_EXTENTION ".mach"
 
 typedef enum
 {

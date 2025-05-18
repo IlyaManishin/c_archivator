@@ -161,38 +161,36 @@ static void replace_path_sep(char *path, char oldSep, char newSep)
     }
 }
 
-static void delete_double_seps(TPathArr paths)
+static void delete_double_seps(char* path)
 {
-    for (int i = 0; i < paths.pathsCount; i++)
-    {
-        char *path = paths.paths[i];
-        int length = strlen(path);
 
-        int curIndex = 0;
-        for (int j = 0; j < length; j++)
+    int length = strlen(path);
+
+    int curIndex = 0;
+    for (int j = 0; j < length; j++)
+    {
+        if (j + 1 < length && path[j] == PATH_SEP && path[j + 1] == PATH_SEP)
         {
-            if (j + 1 < length && path[j] == PATH_SEP && path[j + 1] == PATH_SEP)
-            {
-                continue;
-            }
-            if (curIndex == 0 && path[j] == PATH_SEP)
-            {
-                continue;
-            }
-            path[curIndex] = path[j];
-            curIndex++;
+            continue;
         }
-        path[curIndex] = '\0';
+        if (curIndex == 0 && path[j] == PATH_SEP)
+        {
+            continue;
+        }
+        path[curIndex] = path[j];
+        curIndex++;
     }
+    path[curIndex] = '\0';
+    
 }
 
-static char *get_parent(char *path)
+static char *get_parent(char *path, char sep)
 {
     int length = strlen(path);
     int endInd = -1;
     for (int i = length - 1; i >= 0; i--)
     {
-        if (path[i] == SERIALIZE_SEP)
+        if (path[i] == sep)
         {
             endInd = i;
             break;
@@ -215,7 +213,7 @@ TPathArr serialize_dir_paths(TPathArr paths, char *dirPath)
     result.pathsCount = paths.pathsCount;
 
     char *dirAbsPath = get_real_path(dirPath);
-    char *dirParent = get_parent(dirAbsPath);
+    char *dirParent = get_parent(dirAbsPath, PATH_SEP);
     int parentLength = strlen(dirParent);
     for (int i = 0; i < paths.pathsCount; i++)
     {
@@ -230,9 +228,9 @@ TPathArr serialize_dir_paths(TPathArr paths, char *dirPath)
         }
         result.paths[i][trimLength - 1] = '\0';
     }
-    delete_double_seps(result);
     for (int i = 0; i < result.pathsCount; i++)
     {
+        delete_double_seps(result.paths[i]);
         replace_path_sep(result.paths[i], PATH_SEP, SERIALIZE_SEP);
     }
     free(dirAbsPath);
@@ -286,7 +284,7 @@ TPathArr serialize_files_paths(TPathArr paths)
 
 int create_dirs_for_file(char *filePath)
 {
-    char *fileDir = get_parent(filePath);
+    char *fileDir = get_parent(filePath, SERIALIZE_SEP);
     if (fileDir == NULL)
     {
         return 0;
