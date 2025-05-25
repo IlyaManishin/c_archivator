@@ -34,6 +34,4 @@ TTreeArr *get_tree_arr_by_freq(uint64_t *freqs, int used_codes_count);
 extern TTreePoint *tree_arr_pop(TTreeArr *arr);
 extern void tree_arr_min_append(TTreeArr *arr, TTreePoint *item);
 
-
-
 #endif 

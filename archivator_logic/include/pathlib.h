@@ -2,13 +2,13 @@
 #define PATHLIB_H
 
 #include <stdbool.h>
+#include <stdint.h>
 
 #if defined(_WIN32)
 #include <windows.h>
 
 #define UNDEFINED_SYSTEM 0
 #define PATH_SEP '\\'
-#define IS_WINDOWS 1
 
 #elif defined(__linux__)
 
@@ -16,11 +16,9 @@
 #define UNDEFINED_SYSTEM 0
 
 #define PATH_SEP '/'
-#define IS_WINDOWS 0
 
 #include <dirent.h>
 #include <unistd.h>
-#include <stdint.h>
 #include <sys/stat.h>
 
 #else

@@ -10,7 +10,7 @@
 #include "../include/pathlib.h"
 #include "eta_progress.h"
 
-#define MAX_PATH_PRINT_LENGTH 20
+#define MAX_PATH_PRINT_LENGTH 40
 #define MAX_COMPRESSED_SIZE_LENGTH 20
 #define MAX_BASE_SIZE_LENGTH 30
 #define COLUMN_OFFSET 5
@@ -61,10 +61,9 @@ static void print_string_column(char *s, int maxSize, bool withOffset, EPrintDir
 
 static void print_size_column(uint64_t sizeBytes, int maxSize, bool withOffset, EPrintDirection dir)
 {
-
     char s[100];
     long double sizeMB = ((long double)sizeBytes) / 1024 / 1024;
-    snprintf(s, 100, "%" PRId64 "B(%.2LfMB)", sizeBytes, sizeMB);
+    snprintf(s, 100, "%" PRId64 " B (%.2Lf MB)", sizeBytes, sizeMB);
     print_string_column(s, maxSize, withOffset, dir);
 }
 

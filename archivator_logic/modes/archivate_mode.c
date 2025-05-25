@@ -1,16 +1,14 @@
+#include <inttypes.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <inttypes.h>
 
-#include "../include/types.h"
 #include "../include/core_api.h"
 #include "../include/pathlib.h"
+#include "../include/types.h"
 #include "eta_progress.h"
-
-#define IS_MAC_OS 1
 
 static void write_headers_to_archive(FILE *archive, TPathArr paths)
 {
@@ -31,7 +29,7 @@ static bool is_valid_paths(TPathArr paths, TArchivatorResponse *resp)
     return true;
 }
 
-TPathArr get_paths_to_archivate(TSetupSettings *settings, TArchivatorResponse *resp)
+TPathArr get_paths_to_archivate(TSetupSettings *settings, TArchivatorResponse *resp, char *archivePath)
 {
     TPathArr paths;
     if (settings->dirToArchivate != NULL)
@@ -52,6 +50,19 @@ TPathArr get_paths_to_archivate(TSetupSettings *settings, TArchivatorResponse *r
         }
         paths = list_dir(absArchivateDir);
         paths.isFreeNeeded = true;
+
+        char *archiveAbsPath = get_real_path(archivePath);
+        for (int i = 0; i < paths.pathsCount; i++)
+        {
+            char *path = paths.paths[i];
+            if (strcmp(path, archiveAbsPath) == 0)
+            {
+                free(path);
+                paths.paths[i] = paths.paths[paths.pathsCount - 1];
+                paths.pathsCount--;
+            }
+        }
+        free(archiveAbsPath);
     }
     else
     {
@@ -71,6 +82,7 @@ TPathArr get_paths_to_archivate(TSetupSettings *settings, TArchivatorResponse *r
         resp->errorMessage = "No files to archivate\n";
         return paths;
     }
+
     if (!is_valid_paths(paths, resp))
     {
         if (paths.isFreeNeeded)
@@ -110,7 +122,7 @@ char *add_archive_extention(char *path)
 
 void archivate_mode_run(TSetupSettings *settings, TArchivatorResponse *respDest)
 {
-    if (IS_WINDOWS)
+    if (UNDEFINED_SYSTEM)
     {
         strcpy(respDest->errorMessage, "Your system is not supported. You might buy a good device\n");
         respDest->isError = true;
@@ -129,7 +141,7 @@ void archivate_mode_run(TSetupSettings *settings, TArchivatorResponse *respDest)
     }
     free(destPathWithExt);
 
-    TPathArr paths = get_paths_to_archivate(settings, respDest);
+    TPathArr paths = get_paths_to_archivate(settings, respDest, destPathWithExt);
     if (respDest->isError)
     {
         return;

@@ -1,11 +1,11 @@
 #include "include/pathlib.h"
 
+#include <errno.h>
 #include <limits.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <errno.h>
 
 typedef struct
 {
@@ -30,7 +30,10 @@ void delete_path_arr(TPathArr arr)
 bool is_dir_exists(char *dir)
 {
 #ifdef _WIN32
-    return false;
+    DWORD attrs = GetFileAttributesA(dir);
+    if (attrs == INVALID_FILE_ATTRIBUTES)
+        return false;
+    return (attrs & FILE_ATTRIBUTE_DIRECTORY) != 0;
 #endif
 
 #ifdef __linux__
@@ -48,13 +51,13 @@ bool is_dir_exists(char *dir)
     return true;
 
 #endif
-
-    return NULL;
 }
 
 int make_dir(char *name)
 {
 #if defined(_WIN32)
+    if (CreateDirectoryA(name, NULL) || GetLastError() == ERROR_ALREADY_EXISTS)
+        return 0;
     return -1;
 
 #elif defined(__linux__)
@@ -83,7 +86,45 @@ bool is_file_exists(char *path)
 static void list_dir_recursion(char *curDir, TPathArr *dest)
 {
 #ifdef _WIN32
-    return;
+    char searchPath[MAX_PATH];
+    snprintf(searchPath, MAX_PATH, "%s\\*", curDir);
+
+    WIN32_FIND_DATAA fd;
+    HANDLE hFind = FindFirstFileA(searchPath, &fd);
+    if (hFind == INVALID_HANDLE_VALUE)
+        return;
+
+    BOOL found = TRUE;
+    while (found)
+    {
+        if (strcmp(fd.cFileName, ".") != 0 && strcmp(fd.cFileName, "..") != 0)
+        {
+            int entryPathLength = strlen(curDir) + strlen(fd.cFileName) + 2;
+            char *entryPath = (char *)malloc(entryPathLength);
+
+            snprintf(entryPath, entryPathLength, "%s\\%s", curDir, fd.cFileName);
+
+            bool pathIsDir = (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+            if (pathIsDir)
+            {
+                list_dir_recursion(entryPath, dest);
+                free(entryPath);
+            }
+            else
+            {
+                if (dest->_capacity == dest->pathsCount)
+                {
+                    dest->_capacity *= 2;
+                    dest->paths = (char **)realloc(dest->paths, dest->_capacity * sizeof(char *));
+                }
+                dest->paths[dest->pathsCount++] = entryPath;
+            }
+        }
+
+        found = FindNextFileA(hFind, &fd);
+    }
+
+    FindClose(hFind);
 #endif
 
 #ifdef __linux__
@@ -138,15 +179,26 @@ TPathArr list_dir(char *dirPath)
 
 char *get_real_path(char *src)
 {
-    if (IS_WINDOWS)
-    {
+#ifdef _WIN32
+    char fullPath[MAX_PATH];
+    DWORD len = GetFullPathNameA(src, MAX_PATH, fullPath, NULL);
+    if (len == 0 || len > MAX_PATH)
         return NULL;
-    }
-    else
-    {
-        char *real = realpath(src, NULL);
-        return real;
-    }
+
+    char *result = (char *)malloc(len + 1);
+    if (!result)
+        return NULL;
+
+    strcpy(result, fullPath);
+    int length = strlen(result);
+    if (result[length - 1] == PATH_SEP)
+        result[length - 1] = '\0';
+    return result;
+#endif
+#ifdef __linux__
+    char *real = realpath(src, NULL);
+    return real;
+#endif
 }
 
 static void replace_path_sep(char *path, char oldSep, char newSep)
@@ -161,7 +213,7 @@ static void replace_path_sep(char *path, char oldSep, char newSep)
     }
 }
 
-static void delete_double_seps(char* path)
+static void delete_double_seps(char *path)
 {
 
     int length = strlen(path);
@@ -181,7 +233,6 @@ static void delete_double_seps(char* path)
         curIndex++;
     }
     path[curIndex] = '\0';
-    
 }
 
 static char *get_parent(char *path, char sep)
@@ -336,7 +387,7 @@ char *path_concat(char *path1, char *path2, char sep)
     }
     if (path2[0] != sep)
     {
-        stpcpy(rightDest, path2);
+        strcpy(rightDest, path2);
     }
     else
     {
@@ -438,4 +489,3 @@ int test()
     printf("%s", res);
     return 0;
 }
-

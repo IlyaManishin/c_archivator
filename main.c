@@ -1,10 +1,13 @@
 #include "archivator_logic/archivator_api.h"
 #include "line_command_reader.h"
 
+#include <locale.h>
 #include <stdlib.h>
 
 int main(int argc, char **argv)
 {
+    char *locale = setlocale(LC_ALL, "");
+
     TSetupSettings *settings = read_setup_settings(argc, argv);
     if (settings->isError)
     {
